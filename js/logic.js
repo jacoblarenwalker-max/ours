@@ -4,13 +4,13 @@
 export const TZ = 'America/Denver';
 
 export const CATS = {
-  groceries:  { label: 'Groceries',     color: '#8faa86' },
-  eating_out: { label: 'Eating out',    color: '#c4a574' },
+  groceries:  { label: 'Groceries',     color: '#5b8f47' },
+  eating_out: { label: 'Eating out',    color: '#d4c6a4' },
   gas:        { label: 'Gas & car',     color: '#c47a62' },
-  shopping:   { label: 'Shopping',      color: '#b39279' },
+  shopping:   { label: 'Shopping',      color: '#a89a82' },
   home:       { label: 'Home',          color: '#7f979c' },
-  giving:     { label: 'Giving',        color: '#d9c9a3' },
-  fun:        { label: 'Fun',           color: '#a07e63' },
+  giving:     { label: 'Giving',        color: '#3f6e5a' },
+  fun:        { label: 'Fun',           color: '#8c7f6b' },
   health:     { label: 'Health & care', color: '#9db3a3' },
   other:      { label: 'Other',         color: '#6f685e' },
 };
@@ -81,7 +81,7 @@ export const counts = (r) => !r.dup && !r.mirror;
 
 // ---------- summaries ----------
 export function summarize(rows, from, to) {
-  const s = { from, to, spend: 0, pending: 0, income: 0, investing: 0, transfers: 0, cardPayments: 0, byCat: {}, merchants: {}, items: [] };
+  const s = { from, to, spend: 0, pending: 0, income: 0, investing: 0, transfers: 0, cardPayments: 0, byCat: {}, merchants: {}, items: [], incomeRows: [] };
   for (const r of rows) {
     if (r.date < from || r.date > to || !counts(r)) continue;
     if (r.kind === 'spend') {
@@ -92,7 +92,7 @@ export function summarize(rows, from, to) {
       const e = (m[r.key] ||= { key: r.key, label: r.label, total: 0, count: 0, rows: [] });
       e.total += r.spend; e.count += 1; e.rows.push(r);
       s.items.push(r);
-    } else if (r.kind === 'income') s.income += r.amount;
+    } else if (r.kind === 'income') { s.income += r.amount; s.incomeRows.push(r); }
     else if (r.kind === 'investing') s.investing += -r.amount;
     else if (r.kind === 'transfer' && r.amount < 0) s.transfers += -r.amount;
     else if (r.kind === 'card_payment' && r.src !== 'card' && r.amount < 0) s.cardPayments += -r.amount;

@@ -2,7 +2,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS } from './con
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js';
+} from './logic.js?v=3';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -199,7 +199,7 @@ function donut(parts, size = 148) {
   const total = parts.reduce((s, p) => s + Math.max(0, p.value), 0);
   const r = 58, c = 2 * Math.PI * r, cx = size / 2;
   let off = 0;
-  const arcs = total <= 0 ? `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="#2a261f" stroke-width="16"/>` :
+  const arcs = total <= 0 ? `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="#2b2720" stroke-width="16"/>` :
     parts.filter((p) => p.value > 0).map((p) => {
       const len = (p.value / total) * c; const gap = parts.filter((x) => x.value > 0).length > 1 ? 2.5 : 0;
       const a = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${p.color}" stroke-width="16" stroke-dasharray="${Math.max(0, len - gap)} ${c}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cx})"/>`;
@@ -211,9 +211,9 @@ function donut(parts, size = 148) {
 }
 function ownBlock(w, onWorth = false) {
   const parts = [
-    { name: 'Cash in the bank', short: 'cash', value: w.cash, color: '#8faa86' },
-    { name: 'Investments', short: 'invested', value: w.invest, color: '#c4a574' },
-    { name: 'Things we added', short: 'things', value: w.stuff, color: '#b39279' },
+    { name: 'Cash in the bank', short: 'cash', value: w.cash, color: '#5b8f47' },
+    { name: 'Investments', short: 'invested', value: w.invest, color: '#d4c6a4' },
+    { name: 'Things we added', short: 'things', value: w.stuff, color: '#b3a892' },
   ];
   const total = parts.reduce((s, p) => s + Math.max(0, p.value), 0) || 1;
   return `
@@ -257,7 +257,7 @@ function weekView() {
         <li><span class="t">Top categories</span><span class="v">${esc(top)}</span></li>
         <li><span class="t">Story item</span><span class="v">${pick ? `${esc(pick.label)} · ${m2(pick.spend)} <small>${weekdayName(pick.date)}${pick.note ? ` · “${esc(pick.note)}”` : ''}</small>` : 'Nothing stood out.'}</span></li>
         <li><span class="t">Investing</span><span class="v">${last.investing > 0 ? `${m2(last.investing)} <small>into Bitcoin (River). Not spending.</small>` : 'Nothing this week.'}</span></li>
-        <li><span class="t">Income received</span><span class="v ${last.income > 0 ? 'up' : ''}">${m2(last.income)}</span></li>
+        <li><span class="t">Income received</span><span class="v"><button type="button" class="linkish ${last.income > 0 ? 'up' : ''}" data-income="${L.lastWs}|${addDays(L.lastWs, 6)}|Last week">${m2(last.income)}</button> <small>${last.incomeRows.length ? 'Tap to see who paid us.' : 'Nothing came in.'}</small></span></li>
         <li><span class="t">Transfers and card payments</span><span class="v">${m2(last.transfers)} <small>moved between our accounts</small> · ${m2(last.cardPayments)} <small>paid to cards. Not new spending.</small></span></li>
       </ol>
     </article>
@@ -266,7 +266,7 @@ function weekView() {
     <p class="kicker">This week so far · ${shortDate(weekStart(today()))} to today</p>
     <div class="sofar">
       <div class="tile"><div class="label">Spent</div><div class="num">${m0(tw.spend)}</div>${tw.pending > 0 ? `<div class="warn" style="font-size:13px;margin-top:4px">Includes ${m2(tw.pending)} still pending</div>` : ''}</div>
-      <div class="tile"><div class="label">Earned</div><div class="num ${tw.income > 0 ? 'up' : ''}">${m0(tw.income)}</div></div>
+      <button type="button" class="tile" data-income="${weekStart(today())}|${today()}|This week so far"><div class="label">Earned</div><div class="num ${tw.income > 0 ? 'up' : ''}">${m0(tw.income)}</div><div class="tap-hint">${tw.incomeRows.length ? 'See sources' : 'Nothing in yet'} <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></div></button>
     </div>
   </section>
   ${gapsBlock()}`;
@@ -490,12 +490,40 @@ function historyView() {
     return `<span class="${d > 0 ? 'down' : 'up'}">${d > 0 ? '+' : '−'}${m0(Math.abs(d))}</span>`;
   };
   html += `<table class="hist"><thead><tr><th>Week</th><th>Spending</th><th>vs week before</th><th>Income</th><th>Investing</th></tr></thead><tbody>
-    ${rowsData.map((r) => `<tr class="${r.current ? 'current' : ''}"><td>${weekLabel(r.w.from)}</td><td>${m0(r.w.spend)}</td><td>${vs(r)}</td><td class="${r.w.income > 0 ? 'up' : 'faint'}">${m0(r.w.income)}</td><td class="${r.w.investing > 0 ? 'warn' : 'faint'}">${m0(r.w.investing)}</td></tr>`).join('')}
+    ${rowsData.map((r) => `<tr class="${r.current ? 'current' : ''}"><td>${weekLabel(r.w.from)}</td><td>${m0(r.w.spend)}</td><td>${vs(r)}</td><td><button type="button" class="linkish ${r.w.income > 0 ? 'up' : 'faint'}" data-income="${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></td><td class="${r.w.investing > 0 ? 'warn' : 'faint'}">${m0(r.w.investing)}</td></tr>`).join('')}
   </tbody></table>
   <div class="hist-cards">${rowsData.map((r) => `<div class="hcard"><div class="top-row"><span class="wk">${weekLabel(r.w.from)}${r.current ? ' <span class="faint">· so far</span>' : ''}</span><span class="sp">${m0(r.w.spend)}</span></div>
-    <div class="meta"><span>vs before ${vs(r)}</span><span>In <span class="${r.w.income > 0 ? 'up' : ''}">${m0(r.w.income)}</span></span><span>Invested <span class="${r.w.investing > 0 ? 'warn' : ''}">${m0(r.w.investing)}</span></span></div></div>`).join('')}</div>
+    <div class="meta"><span>vs before ${vs(r)}</span><span>In <button type="button" class="linkish ${r.w.income > 0 ? 'up' : ''}" data-income="${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></span><span>Invested <span class="${r.w.investing > 0 ? 'warn' : ''}">${m0(r.w.investing)}</span></span></div></div>`).join('')}</div>
   <p class="foot">Activity starts ${shortDate(from)}${from.slice(0, 4) !== t.slice(0, 4) ? ' ' + from.slice(0, 4) : ''}, so the oldest week may be partial.</p>`;
   return html;
+}
+
+// ---------------------------------------------------------------- earned sheet
+// Uses the same summarize() as the letter and History, so the total here always matches the number tapped.
+function openIncomeSheet(from, to, title) {
+  const s = summarize(S.rows, from, to);
+  const groups = new Map();
+  for (const r of s.incomeRows) {
+    const g = groups.get(r.key) || { label: r.label, total: 0, rows: [] };
+    g.total += r.amount; g.rows.push(r); groups.set(r.key, g);
+  }
+  const list = [...groups.values()].sort((a, b) => b.total - a.total);
+  list.forEach((g) => g.rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)));
+  const range = to >= today() && from <= today() ? `${shortDate(from)} to today` : `${shortDate(from)} – ${shortDate(to)}`;
+  const n = s.incomeRows.length;
+  const body = !n ? '<p class="empty" style="margin-top:18px">Nothing came in during these days. Transfers between our own accounts and card refunds are not counted as income.</p>' :
+    list.map((g) => {
+      const accts = [...new Set(g.rows.map((r) => (r.acct ? r.acct.display : '')))].filter(Boolean);
+      return `<div class="inc-group"><div class="inc-head"><span class="n">${esc(g.label)}<small>${g.rows.length} ${g.rows.length === 1 ? 'deposit' : 'deposits'}${accts.length === 1 ? ` · into ${esc(accts[0])}` : ''}</small></span><span class="t ${g.total > 0 ? 'up' : ''}">${m2(g.total)}</span></div>
+        <ul class="inc-rows">${g.rows.map((r) => `<li><span class="w">${weekdayName(r.date).slice(0, 3)} ${shortDate(r.date)}${accts.length === 1 ? '' : ` · ${esc(r.acct ? r.acct.display : '')}`}${r.pending ? ' · pending' : ''}${r.note ? ` · “${esc(r.note)}”` : ''}</span><span class="a">${signed(r.amount)}</span></li>`).join('')}</ul></div>`;
+    }).join('');
+  openSheet(`<button type="button" class="iconbtn sheet-x" data-close aria-label="Close"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
+    <p class="kicker" style="margin-bottom:4px">${esc(title)} · ${range}</p>
+    <h3>Where the money came from</h3>
+    <div class="inc-total ${s.income > 0 ? 'up' : ''}">${m2(s.income)}</div>
+    <p class="muted" style="margin:0;font-size:14px">${n ? `${n} ${n === 1 ? 'deposit' : 'deposits'} from ${list.length} ${list.length === 1 ? 'source' : 'sources'}. Same income the letter counts. Transfers between our own accounts are left out.` : ''}</p>
+    ${body}
+    <div class="btns"><button type="button" class="btn ghost" data-close>Done</button></div>`);
 }
 
 // ---------------------------------------------------------------- locked
@@ -528,6 +556,7 @@ document.addEventListener('click', (e) => {
   const nav = t.closest('[data-page]'); if (nav) { e.preventDefault(); go(nav.dataset.page); return; }
   const per = t.closest('[data-period]'); if (per) { S.spendPeriod = per.dataset.period; S.openCat = null; render(); return; }
   const cat = t.closest('[data-cat]'); if (cat) { S.openCat = S.openCat === cat.dataset.cat ? null : cat.dataset.cat; render(); return; }
+  const inc = t.closest('[data-income]'); if (inc) { const [f, to, title] = inc.dataset.income.split('|'); openIncomeSheet(f, to, title); return; }
   const fix = t.closest('[data-fix]'); if (fix) { openFixSheet(fix.dataset.fix, fix.dataset.label, fix.dataset.cur); return; }
   const unfix = t.closest('[data-unfix]'); if (unfix) {
     const key = unfix.dataset.unfix; const f = S.data.fixes.find((x) => x.merchant_key === key);
