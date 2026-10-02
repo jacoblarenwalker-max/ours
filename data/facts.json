@@ -256,7 +256,7 @@
   "trends": [
     {
       "date": "2026-09-16",
-      "title": "The Fed raised rates again",
+      "title": "The Fed raised rates in September",
       "text": "The Fed lifted its policy rate to 3.75%–4%, and officials' median outlook is about 4.1% at the end of 2026 and 2027. Savings rates usually move with it.",
       "src": "Federal Reserve",
       "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm"
@@ -264,7 +264,7 @@
     {
       "date": "2026-09-21",
       "title": "Most savings still pay almost nothing",
-      "text": "The national average savings rate is 0.37% (money market 0.63%). Online and high-yield accounts pay several times that, so where cash sits matters.",
+      "text": "The national average savings rate is 0.37% (money market 0.63%), so which account our cash sits in matters a lot.",
       "src": "FDIC",
       "url": "https://www.fdic.gov/national-rates-and-rate-caps/national-rates-and-rate-caps-september-2026"
     },
