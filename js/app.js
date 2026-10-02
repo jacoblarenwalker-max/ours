@@ -2,13 +2,14 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS } from './con
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=7';
+} from './logic.js?v=8';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=8';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
 const KEYSTORE = 'ours.key';
 const PAGES = [
-  ['week', 'Week'], ['spend', 'Spend'], ['worth', 'Worth'], ['activity', 'Activity'], ['history', 'History'],
+  ['week', 'Week'], ['spend', 'Spend'], ['worth', 'Worth'], ['activity', 'Activity'], ['history', 'History'], ['plan', 'Plan'],
 ];
 const S = {
   key: null, page: 'week', data: null, rows: [], busy: false, fromCache: false, loadError: null,
@@ -46,6 +47,7 @@ const I = {
   worth: '<path d="M3.5 11 12 4l8.5 7M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>',
   activity: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
   history: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  plan: '<circle cx="12" cy="12" r="8.5"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/>',
   car: '<path d="M5 16v2M19 16v2M3.5 13.5 5.2 8.6A2 2 0 0 1 7.1 7.2h9.8a2 2 0 0 1 1.9 1.4l1.7 4.9M3 16h18v-2.5H3V16Z"/><circle cx="7" cy="14.5" r=".5"/><circle cx="17" cy="14.5" r=".5"/>',
   home: '<path d="M3.5 11 12 4l8.5 7M6 9.5V20h12V9.5"/><path d="M10 20v-5h4v5"/>',
   bike: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16 9.5 9h6L18 16M9.5 9 12 16h-1M14 6h2.5l-1 3"/>',
@@ -165,7 +167,7 @@ function render() {
   const main = $('#main');
   if (!S.key) { main.innerHTML = lockedView(); return; }
   if (!S.data) { main.innerHTML = `<div class="page"><p class="empty">${S.busy ? 'Opening our notebook…' : "Couldn't reach our notebook. Check the connection and tap the refresh button."}</p></div>`; return; }
-  const view = { week: weekView, spend: spendView, worth: worthView, activity: activityView, history: historyView }[S.page];
+  const view = { week: weekView, spend: spendView, worth: worthView, activity: activityView, history: historyView, plan: planView }[S.page];
   main.innerHTML = `<div class="page">${view()}</div>`;
 }
 function go(page) {
@@ -580,6 +582,163 @@ function historyView() {
   return html;
 }
 
+// ---------------------------------------------------------------- Plan
+// Advice computed fresh from the live snapshot on every render, plus public figures from data/facts.json.
+let planMemo = { rows: null, items: null, facts: null, out: null };
+function planData() {
+  if (!snap() || !S.facts) return null;
+  if (planMemo.rows === S.rows && planMemo.items === S.data.items && planMemo.facts === S.facts && planMemo.day === today()) return planMemo.out;
+  const A = analyze({ snapshot: snap(), rows: S.rows, items: S.data.items || [], today: today(), facts: S.facts });
+  const steps = nextSteps(A, S.facts);
+  const out = { A, steps, calc: steps.calc, qs: questions(A, S.facts) };
+  planMemo = { rows: S.rows, items: S.data.items, facts: S.facts, day: today(), out };
+  return out;
+}
+async function loadFacts() {
+  try {
+    const r = await fetch('data/facts.json?v=8', { cache: 'no-cache' });
+    if (!r.ok) throw new Error(r.status);
+    const f = await r.json();
+    if (!f || !f.facts || !f.checked) throw new Error('bad facts');
+    S.facts = f; S.factsError = null;
+  } catch (e) { S.facts = null; S.factsError = e; }
+  if (S.page === 'plan') render();
+}
+const longD = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const ext = (f, label) => (f && f.url ? `<a class="src" href="${esc(f.url)}" target="_blank" rel="noopener noreferrer">${esc(label || f.label || f.src)}<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3.5h6.5V10M12.5 3.5 4 12"/></svg></a>` : '');
+const pct1 = (x) => `${(x * 100).toFixed(1)}%`;
+
+function planView() {
+  let html = `<h2 class="page-title">What we'd do next</h2>`;
+  if (!snap()) return html + '<p class="empty">The plan shows up after the first bank pull.</p>';
+  if (!S.facts) return html + `<p class="page-sub">${S.factsError ? "Couldn't load today's rates and limits, so the advice is hidden for now. Tap refresh to try again." : 'Loading rates and limits…'}</p>`;
+  const P = planData(); const { A, steps, calc, qs } = P; const F = S.facts.facts;
+  const span = A.window.length ? `${monthName(A.window[0], true)} to ${monthName(A.window[A.window.length - 1], true)}` : 'what we have';
+  html = staleBanner() + html + `<p class="page-sub">From our own numbers: ${plural(A.months, 'full month')} (${span}) and balances as of ${fmtStamp(S.data.snapshot.pulled_at, false)}.</p>`;
+
+  // summary tiles
+  const rate = A.savingsRate;
+  html += `<div class="tiles three">
+    <button type="button" class="tile" data-sheet="plan-months"><div class="label">In a month</div><div class="num up">${m0(A.income)}</div><div class="tap-hint">By month ${CHEV}</div></button>
+    <button type="button" class="tile" data-sheet="plan-months"><div class="label">Out a month</div><div class="num">${m0(A.living)}</div><div class="tap-hint">By month ${CHEV}</div></button>
+    <div class="tile"><div class="label">We keep</div><div class="num ${rate > 0.15 ? 'up' : rate < 0 ? 'down' : ''}">${rate === null ? '–' : Math.round(rate * 100) + '%'}</div><div class="tap-hint">of what comes in</div></div>
+  </div>`;
+
+  // next steps
+  const MAIN = 6;
+  const stepLi = (s) => `<li class="step">
+      <div class="step-body">
+        <h3 class="step-title">${esc(s.title)}</h3>
+        <p class="step-amt"><b>${m0(s.amount)}</b> <span>${esc(s.amountLabel)}</span></p>
+        <p class="step-why">${esc(s.why)}</p>
+        <p class="step-links"><span class="faint">Learn more:</span> ${ext(s.link)}${s.link2 ? ` ${ext(s.link2)}` : ''}${s.sheet ? ` <button type="button" class="linkish see" data-sheet="${s.sheet}">See our numbers ${CHEV}</button>` : ''}</p>
+      </div></li>`;
+  html += `<section class="section"><p class="kicker">Next steps, most important first</p>
+    <ol class="steps">${steps.slice(0, MAIN).map(stepLi).join('')}</ol>
+    ${steps.length > MAIN ? `<p class="kicker" style="margin-top:26px">Smaller things</p><ol class="steps small" start="${MAIN + 1}">${steps.slice(MAIN).map(stepLi).join('')}</ol>` : ''}
+  </section>`;
+
+  // money in vs out by month
+  const max = Math.max(1, ...A.byMonth.map((m) => Math.max(m.income, m.spend - m.oneOff + m.unseen)));
+  html += `<section class="section"><p class="kicker">Money in and out, by month</p><div class="card"><ul class="months">
+    ${A.byMonth.map((m) => { const out = m.spend - m.oneOff + m.unseen; return `<li class="tap" role="button" tabindex="0" data-sheet="plan-month|${m.month}">
+      <span class="mo-n">${monthName(m.month)}</span>
+      <span class="mo-bars"><span class="b in" style="width:${(m.income / max * 100).toFixed(1)}%"></span><span class="b out" style="width:${(out / max * 100).toFixed(1)}%"></span></span>
+      <span class="mo-v"><span class="up">${m0(m.income)}</span><span>${m0(out)}</span>${m.oneOff ? `<small class="warn">+${m0(m.oneOff)} one-time</small>` : ''}</span>${CHEV}</li>`; }).join('')}
+  </ul><p class="mo-key"><span><i class="k in"></i>In</span><span><i class="k out"></i>Out: purchases${A.unseen > 0 ? ` + ${esc(A.unseenName)} payments` : ''}</span></p></div>
+  <p class="note">${A.oneOffs.length ? `Left out of the usual month: ${A.oneOffs.map((r) => `${esc(r.label)} ${m0(r.spend)} (${shortDate(r.date)})`).join(', ')}. ` : ''}Income counts every deposit tagged as income, including family Venmo, which may be paybacks. ${A.invested > 0 ? `Bitcoin buys (${m0(A.invested)} a month) count as saving, not spending.` : ''}</p></section>`;
+
+  // cushion
+  const em = F.emergency_months || { low: 3, high: 6, text: '' }; const cm = A.cushionMonths || 0; const scale = Math.max(em.high * 1.5, cm * 1.08);
+  html += `<section class="section"><p class="kicker">Emergency cushion</p><div class="card tap" role="button" tabindex="0" data-sheet="plan-extra">
+    <p class="cush-big"><b>${cm.toFixed(1)}</b> months <span class="muted">of a usual month in cash</span></p>
+    <div class="cush-bar"><span class="fill" style="width:${Math.min(100, cm / scale * 100).toFixed(1)}%"></span>
+      <i style="left:${(em.low / scale * 100).toFixed(1)}%"><em>${em.low} mo</em></i><i style="left:${(em.high / scale * 100).toFixed(1)}%"><em>${em.high} mo</em></i></div>
+    <p class="muted" style="margin:26px 0 0;font-size:14.5px">${m0(A.cash)} in cash ÷ ${m0(A.living)} a usual month.${em.text ? ` ${esc(em.text)}.` : ''}</p>
+    <div class="tap-hint">What's extra ${CHEV}</div></div></section>`;
+
+  // where cash sits
+  const nat = F.fdic_savings_national;
+  html += `<section class="section"><p class="kicker">Where our cash sits</p><div class="card"><ul class="rows">
+    ${A.cashSpots.filter((s) => s.balance > 0.005 || s.payments).map((s) => `<li class="tap" role="button" tabindex="0" data-sheet="plan-cash"><span class="name">${esc(s.name)}${s.nickname ? ` <span class="faint">· ${esc(s.nickname)}</span>` : ''}<small class="yield ${s.estYield ? 'up' : 'faint'}">${s.estYield ? `about ${pct1(s.estYield)} a year (estimate)` : 'no interest seen'}</small></span><span class="amt">${m0(s.balance)}</span>${CHEV}</li>`).join('')}
+  </ul></div><p class="note">Estimate = last month's interest × 12 ÷ today's balance. We've received ${m2(sum(A.cashSpots, (s) => s.interest6))} in interest since ${shortDate(A.coverFrom)}. ${nat ? `The national average savings rate is ${nat.value}% (${ext(nat, `FDIC, ${shortDate(nat.as_of)}`)}).` : ''}</p></section>`;
+
+  // what we own
+  const tot = A.cash + A.investTotal + A.stuff || 1;
+  const parts = [['Cash', A.cash, '#16382c', 'cash'], ['Invested', A.investTotal, '#d4c6a4', 'invest'], ['Things we added', A.stuff, '#b3a892', 'stuff']].filter((p) => p[1] > 0);
+  html += `<section class="section"><p class="kicker">What we own, by kind</p><div class="card">
+    <div class="stack" style="margin-top:4px" aria-hidden="true">${parts.map(([, v, c]) => `<span style="flex:${v / tot};background:${c}"></span>`).join('')}</div>
+    <ul class="rows">${parts.map(([n, v, c, sl]) => `<li class="tap" role="button" tabindex="0" data-sheet="own|${sl}"><span class="dot" style="background:${c}"></span><span class="name">${n}</span><span class="amt">${m0(v)}</span><span class="pct">${Math.round(v / tot * 100)}%</span>${CHEV}</li>`).join('')}</ul>
+    ${A.topHolding ? `<p class="muted" style="margin:12px 0 0;font-size:14.5px">Of what's invested, ${Math.round(A.topShare * 100)}% is ${esc(A.topHolding.name)}${A.holdings.length === 1 ? ', our only holding' : ''}. ${A.owe > 0 ? `We owe ${m0(A.owe)}.` : 'No debt on the linked cards.'}</p>` : ''}
+  </div></section>`;
+
+  // regular charges
+  if (A.recurring.length) html += `<section class="section"><p class="kicker">Regular charges we found</p><div class="card"><ul class="rows">
+    ${A.recurring.map((g) => `<li class="tap" role="button" tabindex="0" data-sheet="tx|${g.rows.slice().sort(byDateDesc)[0].id}|Regular charge"><span class="name">${esc(g.label)}<small class="faint">${g.kind === 'investing' ? 'investing · ' : ''}${g.cadence} · ${plural(g.count, 'time')} in ${g.months} months</small></span><span class="amt">${m0(g.perMonth)}<small class="faint">/mo</small></span>${CHEV}</li>`).join('')}
+  </ul></div><p class="note">Same place, steady amount, at least 3 different months. ${A.unseen > 0 ? `Subscriptions on the ${esc(A.unseenName)} can't be seen.` : ''}</p></section>`;
+
+  // questions
+  html += `<section class="section"><p class="kicker">Questions worth asking</p><div class="card"><ul class="qs">
+    ${qs.map((q) => `<li><b>${esc(q.title)}</b><span>${esc(q.why)}</span><span class="step-links">${ext(q.link)}${q.link2 ? ` ${ext(q.link2)}` : ''}</span></li>`).join('')}
+  </ul></div></section>`;
+
+  // trends
+  const tr = (S.facts.trends || []).slice().sort((a, b) => (a.date < b.date ? 1 : -1));
+  if (tr.length) html += `<section class="section"><p class="kicker">What's changing</p><ul class="trends">
+    ${tr.map((t) => `<li><span class="t-date">${longD(t.date)}</span><b>${esc(t.title)}</b><span>${esc(t.text)}</span>${ext(t)}</li>`).join('')}
+  </ul></section>`;
+
+  html += `<div class="foot plan-foot"><p>Rates and limits checked ${longD(S.facts.checked)}. Our numbers update with every bank pull.</p>
+    <p>Educational guidance from our own numbers, not a licensed advisor. For big decisions, talk with a ${F.cfp ? ext(F.cfp, 'fiduciary CFP') : 'fiduciary CFP'}.</p></div>`;
+  return html;
+}
+
+// Plan drill-downs
+function openPlanMonths() {
+  const { A } = planData();
+  const body = A.byMonth.slice().reverse().map((m) => group(`<button type="button" class="linkish" data-sheet="plan-month|${m.month}">${monthName(m.month, true)}</button>`, `${m.oneOff ? `${m0(m.oneOff)} one-time left out · ` : ''}kept ${m0(m.income - (m.spend - m.oneOff + m.unseen))}`, '',
+    [line('In', `<span class="up">${m2(m.income)}</span>`), line('Purchases', m2(m.spend - m.oneOff)), ...(m.unseen ? [line(`Paid to ${esc(A.unseenName)}`, m2(m.unseen))] : []), ...(m.invest ? [line('Invested (saving)', m2(m.invest))] : [])])).join('');
+  sheetPage({ kicker: `Plan · ${plural(A.months, 'full month')}`, title: 'A usual month', total: `${m0(A.income)} in · ${m0(A.living)} out`,
+    note: `Averages over ${A.months} months. Out = purchases${A.unseen > 0 ? ` plus payments to the ${esc(A.unseenName)}, since we can't see its purchases` : ''}; one-time items of ${m0(1500)}+ are left out.`, body });
+}
+function openPlanMonth(mm) {
+  const { A } = planData(); const m = A.byMonth.find((x) => x.month === mm); if (!m) return;
+  const s = summarize(S.rows, m.from, m.to);
+  const cats = s.cats.filter(([, v]) => Math.abs(v) > 0.005);
+  const body = group('Came in', `<button type="button" class="linkish" data-sheet="income|${m.from}|${m.to}|${monthName(mm, true)}">See every deposit</button>`, `<span class="up">${m2(m.income)}</span>`,
+      groupBy(s.incomeRows, (r) => r.key, (r) => r.label, (r) => r.amount).sort((a, b) => b.total - a.total).slice(0, 8).map((g) => line(`${esc(g.label)} <span class="faint">· ${plural(g.rows.length, 'deposit')}</span>`, m2(g.total)))) +
+    group('Purchases', `<button type="button" class="linkish" data-sheet="spent|${m.from}|${m.to}|${monthName(mm, true)}|cat">See every purchase</button>`, m2(m.spend), cats.map(([c, v]) => line(`<span class="dot" style="background:${CATS[c].color}"></span> ${CATS[c].label}`, m2(v)))) +
+    (m.oneOffs.length ? group('One-time, left out of the usual month', '', m2(m.oneOff), m.oneOffs.map((r) => line(`${esc(r.label)} <span class="faint">· ${dayShort(r.date)}</span>`, m2(r.spend)))) : '') +
+    (m.unseen ? group(`Paid to the ${esc(A.unseenName)}`, 'Purchases inside it are not visible', m2(m.unseen), []) : '');
+  sheetPage({ kicker: `Plan · ${monthName(mm, true)} ${mm.slice(0, 4)}`, title: `${monthName(mm, true)}, in and out`, total: `${m0(m.income)} in · ${m0(m.spend - m.oneOff + m.unseen)} out`, body });
+}
+function openPlanExtra() {
+  const { A, calc } = planData();
+  const rows = [line(`Cash in the bank`, m2(A.cash)), line(`Keep ${calc.months} months as a cushion <span class="faint">· ${m0(A.living)} × ${calc.months}</span>`, `−${m2(calc.cushion)}`)];
+  if (calc.seTax > 0) rows.push(line('Self-employment tax set-aside', `−${m2(calc.seTax)}`));
+  if (calc.tuition > 0) rows.push(line(`Half a semester of school <span class="faint">· half of ${m0(calc.tuition)}</span>`, `−${m2(calc.tuition / 2)}`));
+  sheetPage({ kicker: 'Plan · cushion math', title: calc.extra > 0 ? 'Cash beyond the cushion' : 'Still building the cushion', total: m2(calc.extra), totalClass: calc.extra > 0 ? 'up' : 'down',
+    note: 'A rough split. The cushion is a range, so treat this as a starting point.', body: group('How we got there', '', '', rows) });
+}
+function openPlanCash() {
+  const { A } = planData();
+  const body = A.cashSpots.filter((s) => s.balance > 0.005 || s.payments).map((s) => {
+    const ir = S.rows.filter((r) => counts(r) && r.kind === 'income' && /interest/i.test(r.label) && r.account_id === s.id).sort(byDateDesc);
+    return group(esc(s.name), s.estYield ? `about ${pct1(s.estYield)} a year, estimated` : 'No interest seen', m2(s.balance), ir.map((r) => line(`Interest · ${dayShort(r.date)}`, `<span class="up">${signed(r.amount)}</span>`)));
+  }).join('');
+  sheetPage({ kicker: 'Plan · where cash sits', title: 'Interest we actually received', total: m2(sum(A.cashSpots, (s) => s.interest6)), totalClass: 'up',
+    note: `Since ${shortDate(A.coverFrom)}. At the latest interest pace that's about ${m0(A.interest12)} a year.`, body });
+}
+function openPlanRows(kind) {
+  const { A } = planData();
+  const rows = kind === 'unseen' ? A.unseenRows.map((r) => ({ r, v: -r.amount })) : A.tuitionRows.filter((r) => r.date >= A.wFrom && r.date <= A.wTo).map((r) => ({ r, v: r.spend }));
+  const total = sum(rows, (x) => x.v);
+  sheetPage({ kicker: kind === 'unseen' ? `Plan · since ${shortDate(A.coverFrom)}` : `Plan · ${shortDate(A.wFrom)} – ${shortDate(A.wTo)}`, title: kind === 'unseen' ? `Payments to the ${esc(A.unseenName)}` : 'School charges', total: m2(total),
+    note: kind === 'unseen' ? "Each payment covers purchases we can't see until the card is linked." : 'Charges whose name looks like tuition or the university.',
+    body: group('', plural(rows.length, kind === 'unseen' ? 'payment' : 'charge'), '', rows.slice().sort((a, b) => byDateDesc(a.r, b.r)).map(({ r, v }) => line(`${dayShort(r.date)} <span class="faint">· ${esc(r.label)} · ${esc(r.acct ? r.acct.display : '')}</span>`, m2(v)))) });
+}
+const sum = (a, f) => a.reduce((t, x) => t + f(x), 0);
+
 // ---------------------------------------------------------------- drill-down sheets
 // Every sheet recomputes from the same summarize()/worth() the page used, so its total always equals the number tapped.
 const dayShort = (d) => `${weekdayName(d).slice(0, 3)} ${shortDate(d)}`;
@@ -659,7 +818,7 @@ function openVsSheet() {
     totalClass: L.vsPrev > 0.5 ? 'down' : L.vsPrev < -0.5 ? 'up' : '', note: 'Biggest changes first, by category.', body });
 }
 
-function openTxSheet(id) {
+function openTxSheet(id, kicker = 'Story item · last week') {
   const r = S.rows.find((x) => x.id === id); if (!r) return;
   const kindLabel = r.kind === 'spend' ? `Spending · ${CATS[r.cat].label}` : KINDS[r.kind];
   const others = S.rows.filter((x) => x.key === r.key && x.id !== r.id && counts(x) && x.kind === r.kind);
@@ -668,7 +827,7 @@ function openTxSheet(id) {
   const body = `<div class="inc-group"><ul class="inc-rows facts">${fields.map(([k, v]) => line(`<span class="faint">${k}</span>`, v)).join('')}</ul></div>
     ${others.length ? group('Other times here', `${plural(others.length, 'time')} in the last six months`, m2(others.reduce((t, x) => t + (x.kind === 'spend' ? x.spend : Math.abs(x.amount)), 0)),
       others.slice(0, 8).map((x) => line(`${dayShort(x.date)}${pend(x)}`, x.kind === 'spend' ? m2(x.spend) : signed(x.amount)))) : ''}`;
-  sheetPage({ kicker: 'Story item · last week', title: esc(r.label), total: r.kind === 'spend' ? m2(r.spend) : signed(r.amount), note: r.why === 'fix' ? 'Category set by one of our Fix rules.' : '', body });
+  sheetPage({ kicker: esc(kicker), title: esc(r.label), total: r.kind === 'spend' ? m2(r.spend) : signed(r.amount), note: r.why === 'fix' ? 'Category set by one of our Fix rules.' : '', body });
 }
 
 function openInvestSheet(from, to, title) {
@@ -755,10 +914,17 @@ function openSheetFor(spec) {
   if (kind === 'invest') return openInvestSheet(a[0], a[1], a[2]);
   if (kind === 'moves') return openMovesSheet(a[0], a[1], a[2]);
   if (kind === 'vs') return openVsSheet();
-  if (kind === 'tx') return openTxSheet(a[0]);
+  if (kind === 'tx') return openTxSheet(a[0], a[1]);
   if (kind === 'own') return openOwnSheet(a[0] || '');
   if (kind === 'owe') return openOweSheet();
   if (kind === 'target') return openTargetByDay();
+  if (!planData()) return;
+  if (kind === 'plan-months') return openPlanMonths();
+  if (kind === 'plan-month') return openPlanMonth(a[0]);
+  if (kind === 'plan-extra') return openPlanExtra();
+  if (kind === 'plan-cash') return openPlanCash();
+  if (kind === 'plan-unseen') return openPlanRows('unseen');
+  if (kind === 'plan-tuition') return openPlanRows('tuition');
 }
 
 // ---------------------------------------------------------------- locked
@@ -834,7 +1000,7 @@ document.addEventListener('submit', (e) => {
     writeHash(true); load();
   }
 });
-$('#refresh').addEventListener('click', () => load({ manual: true }));
+$('#refresh').addEventListener('click', () => { if (!S.facts) loadFacts(); load({ manual: true }); });
 window.addEventListener('popstate', () => { const { p } = readHash(); S.page = PAGES.some(([id]) => id === p) ? p : 'week'; render(); });
 window.addEventListener('scroll', () => $('.top').classList.toggle('scrolled', window.scrollY > 4), { passive: true });
 document.addEventListener('visibilitychange', () => {
@@ -843,6 +1009,7 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------------------------------------------------------------- boot
 initKey();
+loadFacts();
 if (S.key) {
   const cached = loadCache();
   if (cached) setData(cached, { fromCache: true });

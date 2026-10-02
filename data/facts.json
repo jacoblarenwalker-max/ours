@@ -1,0 +1,286 @@
+{
+  "checked": "2026-10-02",
+  "note": "Public figures only. No household data lives here; the Plan page combines these with our own numbers at runtime. Re-check monthly (see sync/REFRESH.md).",
+  "facts": {
+    "ira_limit": {
+      "value": 7500,
+      "year": 2026,
+      "text": "IRA limit for 2026 (traditional + Roth combined), per person under 50",
+      "src": "IRS",
+      "url": "https://www.irs.gov/newsroom/401k-limit-increases-to-24500-for-2026-ira-limit-increases-to-7500",
+      "as_of": "2025-11-13",
+      "label": "IRS: 2026 limits"
+    },
+    "ira_limit_prev": {
+      "value": 7000,
+      "year": 2025,
+      "text": "IRA limit for 2025",
+      "src": "IRS",
+      "url": "https://www.irs.gov/retirement-plans/cola-increases-for-dollar-limitations-on-benefits-and-contributions",
+      "as_of": "2025-11-13",
+      "label": "IRS: limits table"
+    },
+    "k401_limit": {
+      "value": 24500,
+      "year": 2026,
+      "text": "401(k)/403(b) employee deferral limit for 2026",
+      "src": "IRS",
+      "url": "https://www.irs.gov/newsroom/401k-limit-increases-to-24500-for-2026-ira-limit-increases-to-7500",
+      "as_of": "2025-11-13",
+      "label": "IRS: 2026 limits"
+    },
+    "k401_limit_prev": {
+      "value": 23500,
+      "year": 2025,
+      "text": "401(k) limit for 2025",
+      "src": "IRS",
+      "url": "https://www.irs.gov/newsroom/401k-limit-increases-to-24500-for-2026-ira-limit-increases-to-7500",
+      "as_of": "2025-11-13",
+      "label": "IRS: 2026 limits"
+    },
+    "roth_mfj_phaseout_start": {
+      "value": 242000,
+      "year": 2026,
+      "text": "Roth IRA income phase-out for married filing jointly begins at $242,000 (ends $252,000)",
+      "src": "IRS Notice 2025-67",
+      "url": "https://www.irs.gov/pub/irs-drop/n-25-67.pdf",
+      "as_of": "2025-11-13",
+      "label": "IRS Notice 2025-67"
+    },
+    "ira_deadline": {
+      "text": "IRA contributions for a year can be made until that year's tax-return due date, not including extensions (April 2027 for 2026)",
+      "src": "IRS Publication 590-A",
+      "url": "https://www.irs.gov/publications/p590a",
+      "as_of": "2026-10-02",
+      "label": "IRS Pub 590-A"
+    },
+    "spousal_ira": {
+      "text": "Filing jointly, each spouse can contribute up to the limit as long as combined contributions don't exceed the taxable compensation on the joint return",
+      "src": "IRS",
+      "url": "https://www.irs.gov/retirement-plans/plan-participant-employee/retirement-topics-ira-contribution-limits",
+      "as_of": "2026-10-02",
+      "label": "IRS: IRA rules"
+    },
+    "hsa_self": {
+      "value": 4400,
+      "year": 2026,
+      "text": "HSA limit for 2026, self-only coverage (requires a high-deductible health plan)",
+      "src": "IRS Rev. Proc. 2025-19",
+      "url": "https://www.irs.gov/pub/irs-drop/rp-25-19.pdf",
+      "as_of": "2025-05-01",
+      "label": "IRS Rev. Proc. 2025-19"
+    },
+    "hsa_family": {
+      "value": 8750,
+      "year": 2026,
+      "text": "HSA limit for 2026, family coverage",
+      "src": "IRS Rev. Proc. 2025-19",
+      "url": "https://www.irs.gov/pub/irs-drop/rp-25-19.pdf",
+      "as_of": "2025-05-01",
+      "label": "IRS Rev. Proc. 2025-19"
+    },
+    "hsa_hdhp_min_family": {
+      "value": 3400,
+      "year": 2026,
+      "text": "Minimum deductible for an HSA-eligible family plan in 2026",
+      "src": "IRS Rev. Proc. 2025-19",
+      "url": "https://www.irs.gov/pub/irs-drop/rp-25-19.pdf",
+      "as_of": "2025-05-01",
+      "label": "IRS Rev. Proc. 2025-19"
+    },
+    "dc_total_limit": {
+      "value": 72000,
+      "year": 2026,
+      "text": "Total defined-contribution limit for 2026 (caps Solo 401(k) and SEP contributions)",
+      "src": "IRS",
+      "url": "https://www.irs.gov/retirement-plans/cola-increases-for-dollar-limitations-on-benefits-and-contributions",
+      "as_of": "2025-11-13",
+      "label": "IRS: limits table"
+    },
+    "se_tax_rate": {
+      "value": 0.153,
+      "text": "Self-employment tax is 15.3% (12.4% Social Security + 2.9% Medicare)",
+      "src": "IRS",
+      "url": "https://www.irs.gov/businesses/small-businesses-self-employed/self-employment-tax-social-security-and-medicare-taxes",
+      "as_of": "2026-10-02",
+      "label": "IRS: self-employment tax"
+    },
+    "se_tax_base": {
+      "value": 0.9235,
+      "text": "SE tax is figured on 92.35% of net self-employment earnings",
+      "src": "IRS",
+      "url": "https://www.irs.gov/taxtopics/tc554",
+      "as_of": "2026-10-02",
+      "label": "IRS Topic 554"
+    },
+    "est_tax_dates": {
+      "dates": [
+        "2026-04-15",
+        "2026-06-15",
+        "2026-09-15",
+        "2027-01-15"
+      ],
+      "covers": [
+        "Jan 1 – Mar 31",
+        "Apr 1 – May 31",
+        "Jun 1 – Aug 31",
+        "Sep 1 – Dec 31"
+      ],
+      "text": "2026 estimated tax due dates (Form 1040-ES)",
+      "src": "IRS Form 1040-ES (2026)",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040es--2026.pdf",
+      "as_of": "2026-10-02",
+      "label": "IRS Form 1040-ES"
+    },
+    "est_tax_threshold": {
+      "value": 1000,
+      "text": "Estimated payments are generally required if you expect to owe at least $1,000 after withholding and credits",
+      "src": "IRS",
+      "url": "https://www.irs.gov/faqs/estimated-tax",
+      "as_of": "2026-10-02",
+      "label": "IRS: estimated tax"
+    },
+    "emergency_months": {
+      "low": 3,
+      "high": 6,
+      "text": "Planners often recommend 3 to 6 months of living expenses; more if income is variable",
+      "src": "FINRA",
+      "url": "https://www.finra.org/investors/investing/investing-basics/financial-foundations",
+      "as_of": "2026-10-02",
+      "label": "FINRA"
+    },
+    "fdic_savings_national": {
+      "value": 0.37,
+      "text": "FDIC national average savings rate (APY %)",
+      "src": "FDIC National Rates",
+      "url": "https://www.fdic.gov/national-rates-and-rate-caps/national-rates-and-rate-caps-september-2026",
+      "as_of": "2026-09-21",
+      "label": "FDIC national rates"
+    },
+    "fdic_mm_national": {
+      "value": 0.63,
+      "text": "FDIC national average money market rate (APY %)",
+      "src": "FDIC National Rates",
+      "url": "https://www.fdic.gov/national-rates-and-rate-caps/national-rates-and-rate-caps-september-2026",
+      "as_of": "2026-09-21",
+      "label": "FDIC national rates"
+    },
+    "fed_funds": {
+      "low": 3.75,
+      "high": 4.0,
+      "text": "Federal funds target range after the Sep 16, 2026 increase",
+      "src": "Federal Reserve",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+      "as_of": "2026-09-16",
+      "label": "Federal Reserve"
+    },
+    "fed_median_2026": {
+      "value": 4.1,
+      "text": "Fed officials' median projection for the policy rate at the end of 2026 (and 2027)",
+      "src": "Federal Reserve press conference",
+      "url": "https://www.federalreserve.gov/mediacenter/files/FOMCpresconf20260916.pdf",
+      "as_of": "2026-09-16",
+      "label": "Fed press conference"
+    },
+    "fdic_apps": {
+      "text": "Money held through a non-bank app may be FDIC-insured only through 'pass-through' rules, and only if the partner bank fails, not the app",
+      "src": "FDIC",
+      "url": "https://www.fdic.gov/consumer-resource-center/2024-06/banking-third-party-apps",
+      "as_of": "2026-10-02",
+      "label": "FDIC: banking with apps"
+    },
+    "diversify": {
+      "text": "Diversify across and within asset classes; broad, low-cost index funds or target-date funds are a simple way to do it",
+      "src": "SEC Investor.gov",
+      "url": "https://www.investor.gov/introduction-investing/getting-started/asset-allocation",
+      "as_of": "2026-10-02",
+      "label": "Investor.gov: asset allocation"
+    },
+    "crypto_risk": {
+      "text": "Crypto assets are highly volatile and speculative; only invest money you can afford to lose",
+      "src": "SEC Investor.gov",
+      "url": "https://www.investor.gov/introduction-investing/general-resources/news-alerts/alerts-bulletins/investor-alerts/crypto-asset-securities",
+      "as_of": "2026-10-02",
+      "label": "Investor.gov: crypto alert"
+    },
+    "cash_advance": {
+      "text": "Card cash advances usually carry a fee and a higher interest rate that starts right away, with no grace period",
+      "src": "CFPB",
+      "url": "https://www.consumerfinance.gov/ask-cfpb/can-i-withdraw-money-from-my-credit-card-at-an-atm-en-34/",
+      "as_of": "2026-10-02",
+      "label": "CFPB: cash advances"
+    },
+    "budget": {
+      "text": "Plan for irregular costs and give each dollar a job; review monthly",
+      "src": "CFPB",
+      "url": "https://www.consumerfinance.gov/archive/blog/budgeting-how-to-create-a-budget-and-stick-with-it/",
+      "as_of": "2026-10-02",
+      "label": "CFPB: budgeting"
+    },
+    "solo_401k": {
+      "text": "Self-employed with no employees: a Solo 401(k) or SEP-IRA can shelter business income",
+      "src": "IRS Publication 560",
+      "url": "https://www.irs.gov/publications/p560",
+      "as_of": "2026-10-02",
+      "label": "IRS Pub 560"
+    },
+    "hsa_rules": {
+      "text": "HSA eligibility, contributions and qualified expenses",
+      "src": "IRS Publication 969",
+      "url": "https://www.irs.gov/publications/p969",
+      "as_of": "2026-10-02",
+      "label": "IRS Pub 969"
+    },
+    "life_insurance": {
+      "text": "How term life insurance works and what to compare",
+      "src": "NAIC",
+      "url": "https://content.naic.org/consumer/life-insurance.htm",
+      "as_of": "2026-10-02",
+      "label": "NAIC: life insurance"
+    },
+    "disability_insurance": {
+      "text": "Disability income insurance: what it replaces and what to compare",
+      "src": "NAIC",
+      "url": "https://content.naic.org/article/consumer-insight-if-disability-were-keep-you-earning-living-how-would-you-pay-your-bills",
+      "as_of": "2026-10-02",
+      "label": "NAIC: disability"
+    },
+    "cfp": {
+      "text": "Find a CFP professional (fiduciary)",
+      "src": "CFP Board",
+      "url": "https://www.letsmakeaplan.org/",
+      "as_of": "2026-10-02",
+      "label": "CFP Board"
+    }
+  },
+  "trends": [
+    {
+      "date": "2026-09-16",
+      "title": "The Fed raised rates again",
+      "text": "The Fed lifted its policy rate to 3.75%–4%, and officials' median outlook is about 4.1% at the end of 2026 and 2027. Savings rates usually move with it.",
+      "src": "Federal Reserve",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm"
+    },
+    {
+      "date": "2026-09-21",
+      "title": "Most savings still pay almost nothing",
+      "text": "The national average savings rate is 0.37% (money market 0.63%). Online and high-yield accounts pay several times that, so where cash sits matters.",
+      "src": "FDIC",
+      "url": "https://www.fdic.gov/national-rates-and-rate-caps/national-rates-and-rate-caps-september-2026"
+    },
+    {
+      "date": "2025-11-13",
+      "title": "Higher retirement limits for 2026",
+      "text": "IRA limit rose to $7,500 (from $7,000) and 401(k)/403(b) to $24,500 (from $23,500).",
+      "src": "IRS",
+      "url": "https://www.irs.gov/newsroom/401k-limit-increases-to-24500-for-2026-ira-limit-increases-to-7500"
+    },
+    {
+      "date": "2025-05-01",
+      "title": "HSA limits up for 2026",
+      "text": "$4,400 for self-only and $8,750 for family coverage, if the health plan qualifies.",
+      "src": "IRS",
+      "url": "https://www.irs.gov/pub/irs-drop/rp-25-19.pdf"
+    }
+  ]
+}
