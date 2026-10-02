@@ -406,3 +406,13 @@ a.src:hover { text-decoration-color: currentColor; }
   .wh-grid .sofar .tile { display: flex; flex-direction: column; justify-content: center; }
 }
 @media (min-width: 880px) { .brand-name { font-size: 46px; } .brand-sub { font-size: 12.5px; } }
+/* Plan: money in and out, promoted under the tiles */
+.months-sec { margin-top: 28px; }
+.months-sec .months li { grid-template-columns: 44px 1fr auto 16px; gap: 14px; padding: 13px 0; }
+.months-sec .mo-n { font-size: 15.5px; color: var(--text); }
+.months-sec .mo-bars { gap: 5px; }
+.months-sec .mo-bars .b { height: 10px; border-radius: 3px; }
+.months-sec .mo-v { font-size: 16.5px; line-height: 1.35; }
+.months-sec .mo-v small { font-size: 12.5px; }
+.months-sec .mo-key { font-size: 13px; margin-top: 14px; }
+.months-sec .mo-key .k { width: 12px; height: 9px; }

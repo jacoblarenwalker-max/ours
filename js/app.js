@@ -1,9 +1,9 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=10';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=11';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=10';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=10';
+} from './logic.js?v=11';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=11';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -600,7 +600,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=10', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=11', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -628,6 +628,16 @@ function planView() {
     <div class="tile"><div class="label">We keep</div><div class="num ${rate > 0.15 ? 'up' : rate < 0 ? 'down' : ''}">${rate === null ? '–' : Math.round(rate * 100) + '%'}</div><div class="tap-hint">of what comes in</div></div>
   </div>`;
 
+  // money in vs out by month
+  const max = Math.max(1, ...A.byMonth.map((m) => Math.max(m.income, m.spend - m.oneOff + m.unseen)));
+  html += `<section class="section months-sec"><p class="kicker">Money in and out, by month</p><div class="card"><ul class="months">
+    ${A.byMonth.map((m) => { const out = m.spend - m.oneOff + m.unseen; return `<li class="tap" role="button" tabindex="0" data-sheet="plan-month|${m.month}">
+      <span class="mo-n">${monthName(m.month)}</span>
+      <span class="mo-bars"><span class="b in" style="width:${(m.income / max * 100).toFixed(1)}%"></span><span class="b out" style="width:${(out / max * 100).toFixed(1)}%"></span></span>
+      <span class="mo-v"><span class="up">${m0(m.income)}</span><span>${m0(out)}</span>${m.oneOff ? `<small class="warn">+${m0(m.oneOff)} one-time</small>` : ''}</span>${CHEV}</li>`; }).join('')}
+  </ul><p class="mo-key"><span><i class="k in"></i>In</span><span><i class="k out"></i>Out: purchases${A.unseen > 0 ? ` + ${esc(A.unseenName)} payments` : ''}</span></p></div>
+  <p class="note">${A.oneOffs.length ? `Left out of the usual month: ${A.oneOffs.map((r) => `${esc(r.label)} ${m0(r.spend)} (${shortDate(r.date)})`).join(', ')}. ` : ''}Income counts every deposit tagged as income, including family Venmo, which may be paybacks. ${A.invested > 0 ? `Bitcoin buys (${m0(A.invested)} a month) count as saving, not spending.` : ''}</p></section>`;
+
   // next steps
   const MAIN = 6;
   const stepLi = (s) => `<li class="step">
@@ -641,16 +651,6 @@ function planView() {
     <ol class="steps">${steps.slice(0, MAIN).map(stepLi).join('')}</ol>
     ${steps.length > MAIN ? `<p class="kicker" style="margin-top:26px">Smaller things</p><ol class="steps small" start="${MAIN + 1}">${steps.slice(MAIN).map(stepLi).join('')}</ol>` : ''}
   </section>`;
-
-  // money in vs out by month
-  const max = Math.max(1, ...A.byMonth.map((m) => Math.max(m.income, m.spend - m.oneOff + m.unseen)));
-  html += `<section class="section"><p class="kicker">Money in and out, by month</p><div class="card"><ul class="months">
-    ${A.byMonth.map((m) => { const out = m.spend - m.oneOff + m.unseen; return `<li class="tap" role="button" tabindex="0" data-sheet="plan-month|${m.month}">
-      <span class="mo-n">${monthName(m.month)}</span>
-      <span class="mo-bars"><span class="b in" style="width:${(m.income / max * 100).toFixed(1)}%"></span><span class="b out" style="width:${(out / max * 100).toFixed(1)}%"></span></span>
-      <span class="mo-v"><span class="up">${m0(m.income)}</span><span>${m0(out)}</span>${m.oneOff ? `<small class="warn">+${m0(m.oneOff)} one-time</small>` : ''}</span>${CHEV}</li>`; }).join('')}
-  </ul><p class="mo-key"><span><i class="k in"></i>In</span><span><i class="k out"></i>Out: purchases${A.unseen > 0 ? ` + ${esc(A.unseenName)} payments` : ''}</span></p></div>
-  <p class="note">${A.oneOffs.length ? `Left out of the usual month: ${A.oneOffs.map((r) => `${esc(r.label)} ${m0(r.spend)} (${shortDate(r.date)})`).join(', ')}. ` : ''}Income counts every deposit tagged as income, including family Venmo, which may be paybacks. ${A.invested > 0 ? `Bitcoin buys (${m0(A.invested)} a month) count as saving, not spending.` : ''}</p></section>`;
 
   // cushion
   const em = F.emergency_months || { low: 3, high: 6, text: '' }; const cm = A.cushionMonths || 0; const scale = Math.max(em.high * 1.5, cm * 1.08);
