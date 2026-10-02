@@ -1,9 +1,9 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS } from './config.js';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=10';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=9';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=9';
+} from './logic.js?v=10';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=10';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -600,7 +600,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=9', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=10', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -1012,6 +1012,8 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------------------------------------------------------------- boot
+$('.brand-name').textContent = BRAND_NAME; $('.brand-sub').textContent = SUBTITLE;
+document.title = `${BRAND_NAME} · ${SUBTITLE}`;
 initKey();
 loadFacts();
 if (S.key) {
