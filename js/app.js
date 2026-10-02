@@ -209,7 +209,7 @@ function donut(parts, size = 148) {
   const center = top && total > 0 ? `<text x="${cx}" y="${cx - 2}" text-anchor="middle" font-size="26">${Math.round((top.value / total) * 100)}%</text><text x="${cx}" y="${cx + 18}" text-anchor="middle" font-size="11.5" style="font-family:var(--body);fill:var(--muted)">${esc(top.short)}</text>` : '';
   return `<svg class="donut" viewBox="0 0 ${size} ${size}" role="img" aria-label="What we own, split by kind">${arcs}${center}</svg>`;
 }
-function ownBlock(w) {
+function ownBlock(w, onWorth = false) {
   const parts = [
     { name: 'Cash in the bank', short: 'cash', value: w.cash, color: '#8faa86' },
     { name: 'Investments', short: 'invested', value: w.invest, color: '#c4a574' },
@@ -225,7 +225,7 @@ function ownBlock(w) {
         ${parts.map((p) => `<li><span class="dot" style="background:${p.color}"></span><span class="name">${p.name}</span><span class="amt">${m0(p.value)}</span><span class="pct">${Math.round((Math.max(0, p.value) / total) * 100)}%</span></li>`).join('')}
       </ul>
     </div>
-    ${w.stuff ? '' : '<p class="muted" style="margin:10px 2px 0;font-size:14px">No car or house added yet. <a href="#" data-page="worth" class="warn">Add one on Worth</a>.</p>'}
+    ${w.stuff || onWorth ? '' : '<p class="muted" style="margin:10px 2px 0;font-size:14px">No car or house added yet. <a href="#" data-page="worth" class="warn">Add one on Worth</a>.</p>'}
   </section>`;
 }
 function gapsBlock() {
@@ -369,7 +369,7 @@ function worthView() {
   const ownItems = items.filter((i) => i.side === 'own');
   const oweItems = items.filter((i) => i.side === 'owe');
   const e = S.editing;
-  let html = staleBanner() + heroBlock(w) + ownBlock(w);
+  let html = staleBanner() + heroBlock(w) + ownBlock(w, true);
   html += `
   <section class="section">
     <p class="kicker">What we owe</p>
