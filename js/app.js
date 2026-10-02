@@ -627,15 +627,18 @@ function openSpentSheet(from, to, title, mode = 'cat') {
   const s = summarize(S.rows, from, to);
   const n = s.items.length;
   const refundTag = (r) => (r.spend < 0 ? ' <span class="faint">refund</span>' : '');
+  // Shares only make sense when nothing was refunded (a refund would push a share past 100%).
+  const showPct = s.spend > 0 && s.items.every((r) => r.spend >= 0);
+  const countTxt = (rows) => { const b = rows.filter((r) => r.spend >= 0).length, f = rows.length - b; return [b ? plural(b, 'purchase') : '', f ? plural(f, 'refund') : ''].filter(Boolean).join(' · '); };
   let body;
   if (!n) body = emptyLine('No purchases in these days.');
   else if (mode === 'day') {
     body = groupBy(s.items, (r) => r.date, (r) => r.date, (r) => r.spend).sort((a, b) => (a.key < b.key ? 1 : -1)).map((g) =>
-      group(`${weekdayName(g.key)}, ${shortDate(g.key)}`, plural(g.rows.length, 'purchase'), m2(g.total),
+      group(`${weekdayName(g.key)}, ${shortDate(g.key)}`, countTxt(g.rows), m2(g.total),
         g.rows.map((r) => line(`${esc(r.label)} <span class="faint">· ${CATS[r.cat].label}</span>${pend(r)}${refundTag(r)}${noteOf(r)}`, m2(r.spend))))).join('');
   } else {
     body = groupBy(s.items, (r) => r.cat, (r) => CATS[r.cat].label, (r) => r.spend).sort((a, b) => b.total - a.total).map((g) =>
-      group(`<span class="dot" style="background:${CATS[g.key].color}"></span> ${g.label}`, `${plural(g.rows.length, 'purchase')} · ${Math.round((g.total / (s.spend || 1)) * 100)}%`, m2(g.total),
+      group(`<span class="dot" style="background:${CATS[g.key].color}"></span> ${g.label}`, `${countTxt(g.rows)}${showPct ? ` · ${Math.round((g.total / s.spend) * 100)}%` : ''}`, m2(g.total),
         g.rows.map((r) => line(`${esc(r.label)} <span class="faint">· ${dayShort(r.date)}</span>${pend(r)}${refundTag(r)}${noteOf(r)}`, m2(r.spend))))).join('');
   }
   sheetPage({ kicker: `${esc(title)} · ${rangeText(from, to)}`, title: mode === 'day' ? 'Every purchase, day by day' : 'Where it went',
@@ -704,7 +707,7 @@ function openOwnSheet(slice = '') {
     cash: () => group('Cash in the bank', 'Checking and savings', m2(w.cash), acctRows('cash')),
     invest: () => group('Investments', 'Account balances', m2(w.invest), [...acctRows('investment'),
       ...holdings.map((h) => line(`<span class="faint">Inside it: ${esc(h.name)} ${h.quantity.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${esc(h.ticker)} at ${m0(h.price)}</span>`, `<span class="faint">${m2(h.value)}</span>`))]),
-    stuff: () => group('Things we added', stuff.length ? 'Edit these on Worth' : '', m2(w.stuff), stuff.length ? stuff.map((i) => line(`${esc(i.name)} <span class="faint">· ${esc(i.shape)}</span>`, m2(Number(i.amount)))) : [line('<span class="muted">Nothing added yet. Add a car or house on Worth.</span>', '')]),
+    stuff: () => group('Things we added', stuff.length ? 'Edit these on Worth' : '', m2(w.stuff), stuff.length ? stuff.map((i) => line(`${esc(i.name)} <span class="faint">· ${esc(i.shape)}</span>`, m2(Number(i.amount)))) : [line('<span class="muted">Nothing added yet.</span>', '')]),
   };
   const titles = { cash: 'Cash in the bank', invest: 'Investments', stuff: 'Things we added' };
   const body = slice ? g[slice]() : g.cash() + g.invest() + g.stuff();
@@ -718,7 +721,7 @@ function openOweSheet() {
   const owed = items.filter((i) => i.side === 'owe');
   const cards = accts.filter((a) => a.class === 'liability');
   const body = (cards.length ? group('Cards and loans', 'Balances from the banks', m2(w.cards), acctRows('liability')) : '') +
-    group('Things we owe', owed.length ? 'Added by us on Worth' : '', m2(w.owedItems), owed.length ? owed.map((i) => line(esc(i.name), m2(Number(i.amount)))) : [line('<span class="muted">None added. A car loan or mortgage can go on Worth.</span>', '')]);
+    group('Things we owe', owed.length ? 'Added by us on Worth' : '', m2(w.owedItems), owed.length ? owed.map((i) => line(esc(i.name), m2(Number(i.amount)))) : [line('<span class="muted">None added yet.</span>', '')]);
   sheetPage({ kicker: `What we owe · as of ${fmtStamp(S.data.snapshot ? S.data.snapshot.pulled_at : S.data.server_time, false)}`, title: w.owe > 0.005 ? 'Everything we owe' : 'We owe nothing right now',
     total: m2(w.owe), totalClass: w.owe > 0.005 ? 'down' : '',
     note: w.owe > 0.005 ? '' : `${cards.length ? `Every linked card shows a $0 balance` : 'No cards or loans are linked'}, and we haven't added any loans.`, body });
