@@ -2,7 +2,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS } from './con
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=6';
+} from './logic.js?v=7';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -642,7 +642,7 @@ function openSpentSheet(from, to, title, mode = 'cat') {
         g.rows.map((r) => line(`${esc(r.label)} <span class="faint">· ${dayShort(r.date)}</span>${pend(r)}${refundTag(r)}${noteOf(r)}`, m2(r.spend))))).join('');
   }
   sheetPage({ kicker: `${esc(title)} · ${rangeText(from, to)}`, title: mode === 'day' ? 'Every purchase, day by day' : 'Where it went',
-    total: m2(s.spend), note: n ? `${plural(n, 'purchase')}. Real purchases only, same as the letter${s.pending > 0 ? `. Includes ${m2(s.pending)} still pending` : ''}. Transfers, card payments and Bitcoin buys are left out.` : '', body });
+    total: m2(s.spend), note: n ? `${countTxt(s.items).replace(' · ', ' and ')}. Real purchases only, same as the letter${s.pending > 0 ? `. Includes ${m2(s.pending)} still pending` : ''}. Transfers, card payments and Bitcoin buys are left out.` : '', body });
 }
 
 function openVsSheet() {
