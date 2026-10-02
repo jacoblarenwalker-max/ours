@@ -4,12 +4,12 @@
 export const TZ = 'America/Denver';
 
 export const CATS = {
-  groceries:  { label: 'Groceries',     color: '#5b8f47' },
+  groceries:  { label: 'Groceries',     color: '#16382c' },
   eating_out: { label: 'Eating out',    color: '#d4c6a4' },
   gas:        { label: 'Gas & car',     color: '#c47a62' },
   shopping:   { label: 'Shopping',      color: '#a89a82' },
   home:       { label: 'Home',          color: '#7f979c' },
-  giving:     { label: 'Giving',        color: '#3f6e5a' },
+  giving:     { label: 'Giving',        color: '#b8ad6a' },
   fun:        { label: 'Fun',           color: '#8c7f6b' },
   health:     { label: 'Health & care', color: '#9db3a3' },
   other:      { label: 'Other',         color: '#6f685e' },
@@ -163,6 +163,22 @@ export function buildLetter(rows, today, coverageFrom) {
 
   return { lastWs, last, prev, usual, usualWeeks: usualWeeks.length, verdict, normal, story, storyPick,
     vsPrev: last.spend - prev.spend };
+}
+
+// ---------- weekly target ----------
+// Consumer spending (same number as the letter) against our one shared weekly target.
+export function vsTarget(spend, target) {
+  if (!(Number(target) > 0)) return null;
+  const diff = Number(target) - spend;
+  if (Math.abs(diff) < 0.5) return { state: 'at', diff: 0, target: Number(target) };
+  return { state: diff > 0 ? 'under' : 'over', diff: Math.abs(diff), target: Number(target) };
+}
+export function targetSentence(spend, target, { week = 'Last week' } = {}) {
+  const v = vsTarget(spend, target);
+  if (!v) return null;
+  if (v.state === 'at') return `${week} landed right on our ${money0(v.target)} target.`;
+  return v.state === 'under' ? `${week} came in ${money0(v.diff)} under our ${money0(v.target)} target.`
+    : `${week} went ${money0(v.diff)} over our ${money0(v.target)} target.`;
 }
 
 // ---------- net worth ----------

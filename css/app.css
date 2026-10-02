@@ -7,13 +7,13 @@
   --text: #f3eee4;
   --muted: #9c958a;
   --faint: #6b655c;
-  --up: #5b8f47;          /* forest/olive: 5.1:1 on bg, 4.8:1 on cards */
-  --up-tint: #6b9e55;     /* small text on raised surfaces */
+  --up: #4c8b6e;          /* pine text tint of Everest: 4.9:1 on bg, 4.6:1 on cards */
+  --up-tint: #86b9a0;     /* small text sitting on Everest fills (5.8:1) */
   --down: #c47a62;
   --warn: #d4c6a4;        /* sand */
   --stone: #b3a892;
   --green: #16382c;       /* Everest */
-  --green-line: #2c5a47;
+  --green-line: #3a7a5e;  /* thin lighter edge so Everest fills read against cards */
   --display: 'Fraunces', Georgia, 'Times New Roman', serif;
   --body: 'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --r: 8px;
@@ -136,7 +136,8 @@ button.tile:hover { border-color: var(--green-line); }
 .seg button { border: 1px solid transparent; background: transparent; color: var(--muted); padding: 7px 14px; border-radius: var(--r-sm); font-size: 14.5px; font-weight: 450; white-space: nowrap; }
 .seg button[aria-pressed='true'] { background: var(--green); border-color: var(--green-line); color: var(--text); }
 .stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--card-2); margin: 22px 0 6px; gap: 2px; }
-.stack span { display: block; height: 100%; min-width: 3px; }
+.stack span { display: block; height: 100%; min-width: 3px; box-shadow: inset 0 0 0 1px rgba(243, 238, 228, 0.14); }
+.dot { box-shadow: inset 0 0 0 1px rgba(243, 238, 228, 0.18); }
 .cat { border-bottom: 1px solid var(--line); }
 .cat:last-child { border-bottom: 0; }
 .cat > button { width: 100%; background: none; border: 0; display: flex; align-items: center; gap: 12px; padding: 16px 2px; text-align: left; }
@@ -179,7 +180,7 @@ button.tile:hover { border-color: var(--green-line); }
 .field input:focus { outline: none; border-color: var(--up); }
 .row2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; }
 .btn { border: 1px solid var(--green-line); border-radius: var(--r-sm); padding: 11px 20px; background: var(--green); color: var(--text); font-weight: 550; font-size: 15px; letter-spacing: 0.01em; }
-.btn:hover { background: #1c4637; }
+.btn:hover { background: #1b4434; }
 .btn.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line-strong); font-weight: 450; }
 .btn.danger { background: transparent; color: var(--down); border: 1px solid rgba(196, 122, 98, 0.45); font-weight: 500; }
 .btn[disabled] { opacity: 0.5; cursor: default; }
@@ -266,3 +267,24 @@ button.tile:hover { border-color: var(--green-line); }
 .inc-rows li .w { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inc-rows li .a { color: var(--text); font-variant-numeric: tabular-nums; }
 .sheet-x { float: right; margin: -4px -6px 0 8px; }
+
+/* ---------- weekly target ---------- */
+.target { margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 20px 18px; }
+.target.unset { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: space-between; }
+.target.unset p { margin: 0; color: var(--muted); font-size: 14.5px; flex: 1 1 240px; }
+.target.unset .btn { padding: 8px 16px; font-size: 14px; }
+.target-top { display: flex; align-items: baseline; justify-content: space-between; }
+.target-top .label { color: var(--muted); font-size: 12px; font-weight: 550; letter-spacing: 0.06em; text-transform: uppercase; }
+.target-edit { color: var(--muted); font-size: 13px; }
+.tbar { margin: 12px 0 10px; height: 10px; border-radius: 3px; background: var(--card-2); border: 1px solid var(--line-strong); overflow: hidden; }
+.tbar span { display: block; height: 100%; background: var(--green); box-shadow: inset 0 0 0 1px var(--green-line); border-radius: 2px; transition: width .4s ease; }
+.target.over .tbar span { background: rgba(196, 122, 98, 0.55); box-shadow: inset 0 0 0 1px var(--down); }
+.tline-now { margin: 0; font-size: 15.5px; font-weight: 450; }
+.tline { margin: 12px 0 0; padding: 0 2px; font-size: 15px; color: var(--text); }
+.tline b { font-weight: 600; margin-right: 4px; }
+.tline.under b, .tline.at b { color: var(--up); }
+.tline.over b { color: var(--down); }
+.tmark { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 0 5px; margin-right: 8px; border-radius: 3px; vertical-align: 2px; font-family: var(--body); line-height: 1.6; }
+.tmark.under { color: var(--up); border: 1px solid rgba(58, 122, 94, 0.45); }
+.tmark.over { color: var(--down); border: 1px solid rgba(196, 122, 98, 0.35); }
+.linkish.up { color: var(--up); } .linkish.faint { color: var(--faint); }

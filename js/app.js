@@ -1,8 +1,8 @@
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS } from './config.js';
 import {
-  TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays,
+  TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=3';
+} from './logic.js?v=4';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -202,7 +202,9 @@ function donut(parts, size = 148) {
   const arcs = total <= 0 ? `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="#2b2720" stroke-width="16"/>` :
     parts.filter((p) => p.value > 0).map((p) => {
       const len = (p.value / total) * c; const gap = parts.filter((x) => x.value > 0).length > 1 ? 2.5 : 0;
-      const a = `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${p.color}" stroke-width="16" stroke-dasharray="${Math.max(0, len - gap)} ${c}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cx})"/>`;
+      const arc = (color, width) => `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${color}" stroke-width="${width}" stroke-dasharray="${Math.max(0, len - gap)} ${c}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cx})"/>`;
+      // deep fills (Everest green) get a thin lighter edge so they still read against the card
+      const a = p.edge ? arc(p.edge, 16) + arc(p.color, 13) : arc(p.color, 16);
       off += len; return a;
     }).join('');
   const top = parts.filter((p) => p.value > 0).sort((a, b) => b.value - a.value)[0];
@@ -211,7 +213,7 @@ function donut(parts, size = 148) {
 }
 function ownBlock(w, onWorth = false) {
   const parts = [
-    { name: 'Cash in the bank', short: 'cash', value: w.cash, color: '#5b8f47' },
+    { name: 'Cash in the bank', short: 'cash', value: w.cash, color: '#16382c', edge: '#3a7a5e' },
     { name: 'Investments', short: 'invested', value: w.invest, color: '#d4c6a4' },
     { name: 'Things we added', short: 'things', value: w.stuff, color: '#b3a892' },
   ];
@@ -245,12 +247,15 @@ function weekView() {
   const verdictClass = { more: 'down', less: 'up', same: '', none: 'muted' }[L.verdict];
   const pick = L.storyPick;
   const tw = summarize(S.rows, weekStart(today()), today());
+  const target = targetOf();
+  const lastVs = vsTarget(last.spend, target);
   html += `
   <section class="section">
     <article class="letter">
       <div class="letter-head"><h3>Last week's letter</h3><span class="letter-dates">${weekLabel(L.lastWs)}</span></div>
       <p class="story">${L.story.map(esc).join(' ')}</p>
       <p class="normal"><b class="${verdictClass}">Is this normal?</b> ${esc(L.normal)}</p>
+      ${lastVs ? `<p class="tline ${lastVs.state}"><b>Our target</b> ${esc(targetSentence(last.spend, target))}</p>` : ''}
       <ol class="numbered">
         <li><span class="t">Consumer spending</span><span class="v">${m2(last.spend)}${last.pending > 0 ? ` <small class="warn">Includes ${m2(last.pending)} still pending</small>` : ''}</span></li>
         <li><span class="t">vs last week</span><span class="v ${L.vsPrev > 0.5 ? 'down' : L.vsPrev < -0.5 ? 'up' : ''}">${Math.abs(L.vsPrev) < 0.5 ? 'About the same' : `${m2(Math.abs(L.vsPrev))} ${L.vsPrev > 0 ? 'more' : 'less'}`} <small>than the week before (${m2(L.prev.spend)})</small></span></li>
@@ -268,9 +273,54 @@ function weekView() {
       <div class="tile"><div class="label">Spent</div><div class="num">${m0(tw.spend)}</div>${tw.pending > 0 ? `<div class="warn" style="font-size:13px;margin-top:4px">Includes ${m2(tw.pending)} still pending</div>` : ''}</div>
       <button type="button" class="tile" data-income="${weekStart(today())}|${today()}|This week so far"><div class="label">Earned</div><div class="num ${tw.income > 0 ? 'up' : ''}">${m0(tw.income)}</div><div class="tap-hint">${tw.incomeRows.length ? 'See sources' : 'Nothing in yet'} <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></div></button>
     </div>
+    ${targetBlock(tw, L)}
   </section>
   ${gapsBlock()}`;
   return html;
+}
+
+// ---------------------------------------------------------------- weekly target
+function targetOf() { const v = S.data && S.data.settings ? Number(S.data.settings.weekly_target) : NaN; return v > 0 ? v : null; }
+const suggestTarget = (usual) => (usual && usual >= 1 ? Math.max(10, Math.round(usual / 10) * 10) : null);
+function targetBlock(tw, L) {
+  const target = targetOf();
+  if (!target) {
+    const s = suggestTarget(L.usual);
+    return `<div class="target unset"><p>Set a weekly spending target to see how the week is going.${s ? ` Our usual week is about ${m0(L.usual)}, a good place to start.` : ''}</p>
+      <button type="button" class="btn ghost" data-target-edit>Set a target</button></div>`;
+  }
+  const v = vsTarget(tw.spend, target);
+  const pct = Math.min(100, (tw.spend / target) * 100);
+  const line = v.state === 'over' ? `${m0(tw.spend)} of ${m0(target)}. ${m0(v.diff)} over for the week. A fresh week starts Monday.`
+    : v.state === 'at' ? `${m0(tw.spend)} of ${m0(target)}. Right at the target.`
+    : `${m0(tw.spend)} of ${m0(target)}. ${m0(v.diff)} left for the week.`;
+  return `<div class="target ${v.state}">
+    <div class="target-top"><span class="label">Weekly target</span><button type="button" class="linkish target-edit" data-target-edit>Change</button></div>
+    <div class="tbar" role="img" aria-label="${esc(line)}"><span style="width:${Math.max(pct, tw.spend > 0 ? 2 : 0).toFixed(1)}%"></span></div>
+    <p class="tline-now ${v.state === 'over' ? 'down' : ''}">${line}</p>
+  </div>`;
+}
+function openTargetSheet() {
+  const target = targetOf();
+  const L = buildLetter(S.rows, today(), snap() && snap().coverage && snap().coverage.from);
+  const s = suggestTarget(L.usual);
+  openSheet(`<h3>Weekly spending target</h3>
+    <p>One number for both of us. It counts real purchases only, the same spending as the letter.${L.usual ? ` Our usual week (last 4 weeks) is about ${m0(L.usual)}.` : ''}</p>
+    <form id="target-form" class="form">
+      <div class="field"><label for="target-amt">Dollars per week</label><input id="target-amt" name="amount" inputmode="decimal" autocomplete="off" placeholder="${s || 400}" value="${target ? Math.round(target * 100) / 100 : (s || '')}"></div>
+      <div class="btns"><button class="btn" type="submit">Save target</button>${target ? '<button type="button" class="btn danger" data-target-clear>Remove target</button>' : ''}<button type="button" class="btn ghost" data-close>Cancel</button></div>
+    </form>`,
+  async (e) => { if (e.target.closest('[data-target-clear]')) await saveTarget(null); });
+}
+async function saveTarget(amount) {
+  const prev = S.data.settings ? { ...S.data.settings } : {};
+  closeSheet();
+  try {
+    await rpc('ours_setting_set', { p_name: 'weekly_target', p_value: amount });
+    S.data.settings = { ...prev }; if (amount === null) delete S.data.settings.weekly_target; else S.data.settings.weekly_target = Math.round(amount * 100) / 100;
+    saveCache(); render();
+    toast(amount === null ? 'Target removed.' : `Saved. Our weekly target is ${m0(amount)}.`);
+  } catch { S.data.settings = prev; render(); toast("Couldn't save the target. Nothing changed. Try again."); }
 }
 
 // ---------------------------------------------------------------- Spend
@@ -489,10 +539,17 @@ function historyView() {
     if (Math.abs(d) < 1) return '<span class="muted">same</span>';
     return `<span class="${d > 0 ? 'down' : 'up'}">${d > 0 ? '+' : '−'}${m0(Math.abs(d))}</span>`;
   };
+  const target = targetOf();
+  const mark = (r) => {
+    const v = vsTarget(r.w.spend, target);
+    if (!v || (r.current && v.state !== 'over')) return '';
+    return v.state === 'over' ? `<span class="tmark over" title="${m0(v.diff)} over the ${m0(target)} target">over</span>` : `<span class="tmark under" title="${m0(v.diff)} under the ${m0(target)} target">under</span>`;
+  };
+  if (target) html = html.replace('Monday to Sunday, Mountain time.', `Monday to Sunday, Mountain time. Each week is marked against our ${m0(target)} target.`);
   html += `<table class="hist"><thead><tr><th>Week</th><th>Spending</th><th>vs week before</th><th>Income</th><th>Investing</th></tr></thead><tbody>
-    ${rowsData.map((r) => `<tr class="${r.current ? 'current' : ''}"><td>${weekLabel(r.w.from)}</td><td>${m0(r.w.spend)}</td><td>${vs(r)}</td><td><button type="button" class="linkish ${r.w.income > 0 ? 'up' : 'faint'}" data-income="${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></td><td class="${r.w.investing > 0 ? 'warn' : 'faint'}">${m0(r.w.investing)}</td></tr>`).join('')}
+    ${rowsData.map((r) => `<tr class="${r.current ? 'current' : ''}"><td>${weekLabel(r.w.from)}</td><td>${mark(r)}${m0(r.w.spend)}</td><td>${vs(r)}</td><td><button type="button" class="linkish ${r.w.income > 0 ? 'up' : 'faint'}" data-income="${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></td><td class="${r.w.investing > 0 ? 'warn' : 'faint'}">${m0(r.w.investing)}</td></tr>`).join('')}
   </tbody></table>
-  <div class="hist-cards">${rowsData.map((r) => `<div class="hcard"><div class="top-row"><span class="wk">${weekLabel(r.w.from)}${r.current ? ' <span class="faint">· so far</span>' : ''}</span><span class="sp">${m0(r.w.spend)}</span></div>
+  <div class="hist-cards">${rowsData.map((r) => `<div class="hcard"><div class="top-row"><span class="wk">${weekLabel(r.w.from)}${r.current ? ' <span class="faint">· so far</span>' : ''}</span><span class="sp">${mark(r)}${m0(r.w.spend)}</span></div>
     <div class="meta"><span>vs before ${vs(r)}</span><span>In <button type="button" class="linkish ${r.w.income > 0 ? 'up' : ''}" data-income="${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></span><span>Invested <span class="${r.w.investing > 0 ? 'warn' : ''}">${m0(r.w.investing)}</span></span></div></div>`).join('')}</div>
   <p class="foot">Activity starts ${shortDate(from)}${from.slice(0, 4) !== t.slice(0, 4) ? ' ' + from.slice(0, 4) : ''}, so the oldest week may be partial.</p>`;
   return html;
@@ -556,6 +613,7 @@ document.addEventListener('click', (e) => {
   const nav = t.closest('[data-page]'); if (nav) { e.preventDefault(); go(nav.dataset.page); return; }
   const per = t.closest('[data-period]'); if (per) { S.spendPeriod = per.dataset.period; S.openCat = null; render(); return; }
   const cat = t.closest('[data-cat]'); if (cat) { S.openCat = S.openCat === cat.dataset.cat ? null : cat.dataset.cat; render(); return; }
+  if (t.closest('[data-target-edit]')) { openTargetSheet(); return; }
   const inc = t.closest('[data-income]'); if (inc) { const [f, to, title] = inc.dataset.income.split('|'); openIncomeSheet(f, to, title); return; }
   const fix = t.closest('[data-fix]'); if (fix) { openFixSheet(fix.dataset.fix, fix.dataset.label, fix.dataset.cur); return; }
   const unfix = t.closest('[data-unfix]'); if (unfix) {
@@ -578,6 +636,14 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('submit', (e) => {
   if (e.target.id === 'item-form') { e.preventDefault(); submitItem(e.target); }
+  if (e.target.id === 'target-form') {
+    e.preventDefault();
+    const raw = String(e.target.amount.value).replace(/[$,\s]/g, '');
+    if (raw === '') return toast('Type a dollar amount, like 400.');
+    const n = Number(raw);
+    if (!isFinite(n) || n < 1 || n > 1000000) return toast('Use a dollar amount, like 400.');
+    saveTarget(Math.round(n * 100) / 100);
+  }
   if (e.target.id === 'unlock') {
     e.preventDefault();
     const v = $('#unlock-key').value.trim();
