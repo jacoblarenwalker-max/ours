@@ -1,18 +1,22 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=11';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=12';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=11';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=11';
+} from './logic.js?v=12';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=12';
+import * as Auth from './auth.js?v=12';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
-const KEYSTORE = 'ours.key';
+const KEYSTORE = 'ours.key';        // the private link key: only used to set up Face ID, never to read data
+const ENROLLED = 'ours.enrolled';   // non-secret flag: this browser has set up Face ID before
+const LOCK_AFTER_MS = 5 * 60e3;     // relock after this long in the background
 const PAGES = [
   ['week', 'Week'], ['spend', 'Spend'], ['worth', 'Worth'], ['activity', 'Activity'], ['history', 'History'], ['plan', 'Plan'],
 ];
 const S = {
-  key: null, page: 'week', data: null, rows: [], busy: false, fromCache: false, loadError: null,
+  linkKey: null, session: null, sessionExp: 0, lockMode: 'unlock', lockMsg: '', lockBusy: false, devices: null, hiddenAt: 0,
+  page: 'week', data: null, rows: [], busy: false, fromCache: false, loadError: null,
   spendPeriod: 'this', openCat: null, actFilter: 'all', actLimit: 80, editing: null, draftShape: 'car',
 };
 
@@ -67,28 +71,92 @@ function readHash() {
 }
 function writeHash(replace = false) {
   const h = new URLSearchParams();
-  if (S.key) h.set('k', S.key);
   if (S.page !== 'week') h.set('p', S.page);
   const url = `${location.pathname}${location.search}#${h.toString()}`;
   if (replace) history.replaceState(null, '', url); else history.pushState(null, '', url);
 }
 function initKey() {
   const { k, p } = readHash();
-  if (k) { S.key = k; try { localStorage.setItem(KEYSTORE, k); } catch {} }
-  else { try { S.key = localStorage.getItem(KEYSTORE); } catch {} }
+  // The link key only sets up Face ID. Hold it until setup succeeds, and take it out of the address bar.
+  if (k) { S.linkKey = k; try { localStorage.setItem(KEYSTORE, k); } catch {} }
+  else { try { S.linkKey = localStorage.getItem(KEYSTORE); } catch {} }
   if (p && PAGES.some(([id]) => id === p)) S.page = p;
-  if (S.key && !k) writeHash(true); // keep the key in the link so a home-screen copy opens straight in
+  writeHash(true);
+  try { localStorage.removeItem(CACHE); } catch {} // older versions kept a plain copy of the data here
+  S.lockMode = S.linkKey && !enrolledHere() ? 'setup' : 'unlock';
+}
+function enrolledHere() { try { return !!localStorage.getItem(ENROLLED); } catch { return false; } }
+
+// ---------------------------------------------------------------- face id lock
+let expTimer = null;
+function startSession(res) {
+  S.session = res.session; S.sessionExp = Date.parse(res.expires_at) || Date.now() + 12 * 3600e3;
+  S.lockMsg = ''; S.lockBusy = false; S.devices = null; S.hiddenAt = 0;
+  try { localStorage.setItem(ENROLLED, '1'); } catch {}
+  clearTimeout(expTimer);
+  expTimer = setTimeout(() => lockNow('Signed out after 12 hours. Unlock again to keep going.', { revoke: false }), Math.min(Math.max(S.sessionExp - Date.now(), 1000), 2 ** 31 - 1));
+  S.lastLoad = Date.now(); load();
+}
+function lockNow(msg = '', { revoke = true } = {}) {
+  const tok = S.session;
+  S.session = null; S.sessionExp = 0; S.data = null; S.rows = []; S.devices = null; S.editing = null; S.loadError = null;
+  planMemo = { rows: null, items: null, facts: null, out: null };
+  clearTimeout(expTimer); clearTimeout(pollTimer); closeSheet();
+  S.lockMode = 'unlock'; S.lockMsg = msg; S.lockBusy = false;
+  if (revoke && tok) Auth.call('logout', { session: tok }).catch(() => {});
+  render(); window.scrollTo({ top: 0 });
+}
+function sessionLive() { return !!S.session && Date.now() < S.sessionExp; }
+async function doUnlock() {
+  if (S.lockBusy) return;
+  S.lockBusy = true; S.lockMsg = ''; render();
+  try { startSession(await Auth.unlock()); }
+  catch (e) {
+    S.lockBusy = false;
+    if (e.code === 'unknown_device') { S.lockMode = 'setup'; S.lockMsg = "This device's Face ID isn't set up for Ours yet, or it was removed. Set it up below."; }
+    else S.lockMsg = e.message;
+    render();
+  }
+}
+function parseSetupCode(v) {
+  v = String(v || '').trim(); if (!v) return {};
+  const m = v.match(/[#&]k=([^&\s]+)/); if (m) return { key: decodeURIComponent(m[1]) };
+  if (/^[A-Za-z0-9]{4}[-\s]?[A-Za-z0-9]{4}$/.test(v)) return { invite: v.toUpperCase().replace(/\s/, '-').replace(/^(.{4})(?!-)/, '$1-') };
+  return { key: v };
+}
+async function doEnroll(form) {
+  if (S.lockBusy) return;
+  const name = form.name.value.trim().replace(/\s+/g, ' ');
+  if (!name) { S.lockMsg = 'Give this device a name, like Jacob’s iPhone.'; return render(); }
+  const typed = form.code ? parseSetupCode(form.code.value) : {};
+  const secret = typed.key || typed.invite ? typed : { key: S.linkKey };
+  if (!secret.key && !secret.invite) { S.lockMsg = 'Open Ours from our private link, or type a setup code from a device that is already unlocked.'; return render(); }
+  S.lockBusy = true; S.lockMsg = ''; S.draftDevice = name; render();
+  try {
+    const res = await Auth.enroll(name, secret);
+    S.linkKey = null; S.needCode = false; S.draftDevice = '';
+    try { localStorage.removeItem(KEYSTORE); } catch {}
+    startSession(res);
+    toast(`Face ID is set up on ${res.device ? res.device.name : 'this device'}.`);
+  } catch (e) {
+    S.lockBusy = false;
+    if (e.code === 'link_closed') { S.needCode = true; S.lockMsg = e.message || 'Our private link has already set up two devices. On a device that is already unlocked, open Worth, then Devices, then Add a device, and type that code here.'; }
+    else if (e.code === 'bad_key' || e.code === 'bad_invite' || e.code === 'no_key') { S.needCode = true; S.lockMsg = e.message; }
+    else S.lockMsg = e.message;
+    render();
+  }
 }
 
 // ---------------------------------------------------------------- api
 async function rpc(fn, body, timeoutMs = 15000) {
+  if (!sessionLive()) { const err = new Error('locked'); if (S.session) lockNow('Signed out after 12 hours. Unlock again to keep going.', { revoke: false }); throw err; }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
       method: 'POST', signal: ctrl.signal, cache: 'no-store',
       headers: { apikey: SUPABASE_PUBLISHABLE_KEY, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_key: S.key, ...body }),
+      body: JSON.stringify({ p_key: S.session, ...body }),
     });
     const text = await res.text();
     if (!res.ok) {
@@ -104,8 +172,8 @@ function setData(d, { fromCache = false } = {}) {
   S.data = d; S.fromCache = fromCache;
   S.rows = d && d.snapshot ? classifyAll(d.snapshot.data, d.fixes || []) : [];
 }
-function saveCache() { try { localStorage.setItem(CACHE, JSON.stringify(S.data)); } catch {} }
-function loadCache() { try { const c = localStorage.getItem(CACHE); return c ? JSON.parse(c) : null; } catch { return null; } }
+// No copy of our numbers is kept on the device: they live in memory only while unlocked.
+function saveCache() {}
 
 let pollTimer = null;
 async function load({ manual = false } = {}) {
@@ -123,11 +191,11 @@ async function load({ manual = false } = {}) {
       else toast(`No newer bank pull yet. Still ${fmtStamp(snap.pulled_at)}. A fresh pull has been requested.`, 6000);
     }
   } catch (e) {
-    if (e.message === 'locked') { S.busy = false; S.key = null; try { localStorage.removeItem(KEYSTORE); } catch {} render(); return; }
+    if (e.message === 'locked') { S.busy = false; if (S.session) lockNow('Your sign-in ended. Unlock again to keep going.', { revoke: false }); else render(); return; }
     S.loadError = e;
     if (S.data) toast(`Couldn't reach our notebook. Showing the last copy, from ${fmtStamp(S.data.snapshot ? S.data.snapshot.pulled_at : S.data.server_time, false)}.`, 6000);
   } finally {
-    S.busy = false; render(); schedulePoll();
+    S.busy = false; render(); if (S.session) schedulePoll();
   }
 }
 // While a fresh pull is requested, quietly check every minute whether it landed (up to 15 minutes).
@@ -156,16 +224,18 @@ function renderStatus() {
   el.classList.remove('old', 'busy');
   if (S.busy) { el.textContent = 'Updating…'; el.classList.add('busy'); return; }
   const snap = S.data && S.data.snapshot;
-  if (!snap) { el.textContent = S.key ? 'No bank pull yet' : ''; return; }
+  if (!S.session) { el.textContent = ''; return; }
+  if (!snap) { el.textContent = 'No bank pull yet'; return; }
   const shortD = new Date(snap.pulled_at).toLocaleDateString('en-US', { timeZone: TZ, month: 'short', day: 'numeric' });
   el.innerHTML = `<span class="s-long">Updated ${fmtStamp(snap.pulled_at)}</span><span class="s-short">Updated ${shortD}</span>`;
   el.title = `Balances as of ${fmtStamp(snap.pulled_at)} Mountain time`;
   if (hoursOld(snap.pulled_at) > STALE_AFTER_HOURS || S.loadError) el.classList.add('old');
 }
 function render() {
+  document.body.classList.toggle('is-locked', !S.session);
   renderNav(); renderStatus();
   const main = $('#main');
-  if (!S.key) { main.innerHTML = lockedView(); return; }
+  if (!S.session) { main.innerHTML = lockedView(); return; }
   if (!S.data) { main.innerHTML = `<div class="page"><p class="empty">${S.busy ? 'Opening our notebook…' : "Couldn't reach our notebook. Check the connection and tap the refresh button."}</p></div>`; return; }
   const view = { week: weekView, spend: spendView, worth: worthView, activity: activityView, history: historyView, plan: planView }[S.page];
   main.innerHTML = `<div class="page">${view()}</div>`;
@@ -495,7 +565,7 @@ function worthView() {
     }).join('') || '<p class="empty">No accounts linked yet.</p>'}</div>
     ${snap() ? `<p class="faint" style="font-size:13px;margin:10px 2px 0">Balances as of ${fmtStamp(S.data.snapshot.pulled_at)}.</p>` : ''}
   </section>`;
-  return html;
+  return html + devicesBlock();
 }
 async function submitItem(form) {
   const name = form.name.value.trim();
@@ -600,7 +670,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=11', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=12', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -932,13 +1002,95 @@ function openSheetFor(spec) {
 }
 
 // ---------------------------------------------------------------- locked
+const FACE = '<svg class="faceid" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16"/><path d="M8.5 9v1.5M15.5 9v1.5M12 9v4h-1M9 16c1.7 1.3 4.3 1.3 6 0"/></svg>';
 function lockedView() {
-  return `<div class="locked page">
-    <img class="mono" src="icons/icon-192.png" alt="">
-    <h2>This notebook is private.</h2>
-    <p>Open it from the link we saved, or paste that link here.</p>
-    <form id="unlock" class="form"><div class="field"><label for="unlock-key">Link or key</label><input id="unlock-key" required autocomplete="off" spellcheck="false"></div><button class="btn" type="submit">Open</button></form>
+  const busy = S.lockBusy;
+  const msg = S.lockMsg ? `<p class="lock-msg" role="alert">${esc(S.lockMsg)}</p>` : '';
+  const head = `<img class="mono" src="icons/icon-192.png?v=3" alt="">`;
+  if (S.lockMode !== 'setup') return `<div class="locked page" data-lock="unlock">
+    ${head}
+    <h2>Ours is locked.</h2>
+    <p>Unlock with Face ID to open our numbers.</p>
+    <button type="button" class="btn lock-btn" data-unlock ${busy ? 'disabled' : ''}>${FACE}<span>${busy ? 'Checking…' : 'Unlock with Face ID'}</span></button>
+    ${msg}
+    <p class="lock-alt"><button type="button" class="linkish" data-lock-mode="setup">New phone or computer? Set up Face ID</button></p>
   </div>`;
+  const needCode = !S.linkKey || S.needCode;
+  return `<div class="locked page" data-lock="setup">
+    ${head}
+    <h2>Set up Face ID</h2>
+    <p>Once on each phone or computer. After this, Ours opens only with Face ID, Touch ID or Windows Hello.</p>
+    <form id="enroll" class="form" autocomplete="off">
+      <div class="field"><label for="enroll-name">Name this device</label><input id="enroll-name" name="name" maxlength="40" required autocomplete="off" placeholder="Jacob’s iPhone" value="${esc(S.draftDevice || '')}"></div>
+      ${needCode ? `<div class="field"><label for="enroll-code">Setup code or our private link</label><input id="enroll-code" name="code" required autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-2345"><p class="faint field-hint">Get a code on a device that is already unlocked: Worth, then Devices, then Add a device.</p></div>` : ''}
+      <button class="btn lock-btn" type="submit" ${busy ? 'disabled' : ''}>${FACE}<span>${busy ? 'Setting up…' : 'Set up Face ID'}</span></button>
+    </form>
+    ${msg}
+    <p class="lock-alt"><button type="button" class="linkish" data-lock-mode="unlock">Already set up? Unlock instead</button></p>
+  </div>`;
+}
+
+// ---------------------------------------------------------------- devices
+const shortDay = (iso) => new Date(iso).toLocaleDateString('en-US', { timeZone: TZ, month: 'short', day: 'numeric', year: new Date(iso).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+function devicesBlock() {
+  if (!S.session) return '';
+  if (S.testSession) return '<section class="section" id="devices"><p class="kicker">Devices with Face ID</p><div class="card"><p class="muted">Box test session: devices are not shown.</p></div></section>';
+  if (!S.devices) loadDevices();
+  const list = S.devices || [];
+  const rows = S.devices ? list.map((d) => `<li class="dev"><span class="name"><span>${esc(d.name)}${d.this_device ? ' <span class="pill">This device</span>' : ''}</span>
+      <span class="faint dev-meta">Added ${shortDay(d.created_at)}${d.last_used_at ? ` · last unlocked ${fmtStamp(d.last_used_at)}` : ''}${d.synced ? ' · synced passkey' : ''}</span></span>
+      <button type="button" class="btn ghost small" data-dev-remove="${esc(d.id)}">Remove</button></li>`).join('') || '<li class="muted">No devices.</li>'
+    : '<li class="muted">Loading…</li>';
+  return `<section class="section" id="devices">
+    <p class="kicker">Devices with Face ID</p>
+    <div class="card"><ul class="rows dev-rows">${rows}</ul>
+      <p class="faint" style="font-size:13px;margin:12px 0 0">Only these can open Ours. Sign-in lasts up to 12 hours and locks again after 5 minutes away.</p>
+      <div class="btns" style="margin-top:14px"><button type="button" class="btn" data-dev-invite>Add a device</button><button type="button" class="btn ghost" data-lock-now>Lock now</button></div>
+    </div>
+  </section>`;
+}
+let devLoading = false;
+async function loadDevices() {
+  if (devLoading || !S.session) return;
+  devLoading = true;
+  try { const r = await Auth.call('devices', { session: S.session }); S.devices = r.devices || []; }
+  catch (e) { if (e.code === 'locked') { devLoading = false; return lockNow('Your sign-in ended. Unlock again to keep going.', { revoke: false }); } S.devices = S.devices || []; }
+  devLoading = false;
+  if (S.session && S.page === 'worth') { const y = window.scrollY; render(); window.scrollTo({ top: y }); }
+}
+function confirmRemoveDevice(id) {
+  const d = (S.devices || []).find((x) => x.id === id); if (!d) return;
+  const last = S.devices.length <= 1;
+  const body = last
+    ? `<p><strong>This is the last device.</strong> After removing it, nobody can open Ours until a device is set up again with our private link.</p>`
+    : `<p>${d.this_device ? 'This device locks right away and' : 'It'} won't be able to open Ours anymore. You can set it up again later with a setup code.</p>`;
+  openSheet(`<h3>Remove ${esc(d.name)}?</h3>${body}
+    <div class="btns"><button type="button" class="btn danger" data-confirm>${last ? 'Remove the last device' : 'Remove it'}</button><button type="button" class="btn ghost" data-close>Keep it</button></div>`,
+  async (e) => {
+    if (!e.target.closest('[data-confirm]')) return;
+    closeSheet();
+    try {
+      const r = await Auth.call('device-remove', { session: S.session, id, confirmLast: last });
+      if (r.signed_out) { try { localStorage.removeItem(ENROLLED); } catch {} lockNow(`${d.name} was removed.`, { revoke: false }); return; }
+      S.devices = r.devices || S.devices.filter((x) => x.id !== id); render(); toast(`${d.name} removed.`);
+    } catch (err) {
+      if (err.code === 'locked') return lockNow('Your sign-in ended. Unlock again to keep going.', { revoke: false });
+      toast(err.message && err.code !== 'network' ? err.message : "Couldn't remove it. Nothing changed. Try again.");
+    }
+  });
+}
+async function openInvite() {
+  try {
+    const r = await Auth.call('invite', { session: S.session });
+    const mins = Math.max(1, Math.round((Date.parse(r.expires_at) - Date.now()) / 60e3));
+    openSheet(`<h3>Setup code</h3>
+      <p class="invite-code" aria-label="Setup code">${esc(r.code)}</p>
+      <p>On the new phone or computer, open Ours, tap <em>Set up Face ID</em>, name it, and type this code. It works once, for the next ${mins} minutes.</p>
+      <div class="btns"><button type="button" class="btn ghost" data-close>Done</button></div>`, () => {});
+  } catch (err) {
+    if (err.code === 'locked') return lockNow('Your sign-in ended. Unlock again to keep going.', { revoke: false });
+    toast(err.message && err.code !== 'network' ? err.message : "Couldn't make a setup code. Try again.");
+  }
 }
 
 // ---------------------------------------------------------------- sheet
@@ -961,6 +1113,12 @@ document.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------- events
 document.addEventListener('click', (e) => {
   const t = e.target;
+  if (t.closest('[data-unlock]')) { doUnlock(); return; }
+  const lm = t.closest('[data-lock-mode]'); if (lm) { S.lockMode = lm.dataset.lockMode; S.lockMsg = ''; render(); const f = $('#enroll-name'); if (f) f.focus(); return; }
+  if (t.closest('[data-lock-now]')) { lockNow(''); return; }
+  if (t.closest('[data-dev-invite]')) { openInvite(); return; }
+  const dr = t.closest('[data-dev-remove]'); if (dr) { confirmRemoveDevice(dr.dataset.devRemove); return; }
+  if (!S.session) return;
   const nav = t.closest('[data-page]'); if (nav) { e.preventDefault(); go(nav.dataset.page); return; }
   const per = t.closest('[data-period]'); if (per) { S.spendPeriod = per.dataset.period; S.openCat = null; render(); return; }
   const cat = t.closest('[data-cat]'); if (cat) { S.openCat = S.openCat === cat.dataset.cat ? null : cat.dataset.cat; render(); return; }
@@ -995,30 +1153,35 @@ document.addEventListener('submit', (e) => {
     if (!isFinite(n) || n < 1 || n > 1000000) return toast('Use a dollar amount, like 400.');
     saveTarget(Math.round(n * 100) / 100);
   }
-  if (e.target.id === 'unlock') {
-    e.preventDefault();
-    const v = $('#unlock-key').value.trim();
-    const m = v.match(/[#&]k=([^&\s]+)/); const key = m ? decodeURIComponent(m[1]) : v;
-    if (!key) return;
-    S.key = key; try { localStorage.setItem(KEYSTORE, key); } catch {}
-    writeHash(true); load();
-  }
+  if (e.target.id === 'enroll') { e.preventDefault(); doEnroll(e.target); }
 });
-$('#refresh').addEventListener('click', () => { if (!S.facts) loadFacts(); load({ manual: true }); });
+$('#refresh').addEventListener('click', () => { if (!S.session) return; if (!S.facts) loadFacts(); load({ manual: true }); });
 window.addEventListener('popstate', () => { const { p } = readHash(); S.page = PAGES.some(([id]) => id === p) ? p : 'week'; render(); });
 window.addEventListener('scroll', () => $('.top').classList.toggle('scrolled', window.scrollY > 4), { passive: true });
+// Lock again after 5 minutes in the background, or when the 12-hour sign-in runs out.
+function checkAway() {
+  if (!S.session) return;
+  if (S.hiddenAt && Date.now() - S.hiddenAt > LOCK_AFTER_MS) return lockNow('Locked after a few minutes away.');
+  if (!sessionLive()) return lockNow('Signed out after 12 hours. Unlock again to keep going.', { revoke: false });
+  S.hiddenAt = 0;
+  if (S.data && Date.now() - (S.lastLoad || 0) > 5 * 60e3) { S.lastLoad = Date.now(); load(); }
+}
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && S.key && S.data && Date.now() - (S.lastLoad || 0) > 5 * 60e3) { S.lastLoad = Date.now(); load(); }
+  // Blur the numbers while away, so the app switcher's snapshot doesn't show them.
+  document.body.classList.toggle('away', document.visibilityState === 'hidden');
+  if (document.visibilityState === 'hidden') { if (S.session && !S.hiddenAt) S.hiddenAt = Date.now(); return; }
+  checkAway();
 });
+window.addEventListener('pagehide', () => { if (S.session && !S.hiddenAt) S.hiddenAt = Date.now(); });
+window.addEventListener('pageshow', (e) => { if (e.persisted) checkAway(); });
+window.addEventListener('focus', checkAway);
 
 // ---------------------------------------------------------------- boot
 $('.brand-name').textContent = BRAND_NAME; $('.brand-sub').textContent = SUBTITLE;
 document.title = `${BRAND_NAME} · ${SUBTITLE}`;
 initKey();
 loadFacts();
-if (S.key) {
-  const cached = loadCache();
-  if (cached) setData(cached, { fromCache: true });
-  S.lastLoad = Date.now();
-  load();
-} else render();
+render();
+Auth.supported().then((r) => { if (!r.ok && !S.session) { S.lockMsg = r.why; render(); } });
+// Test hook for the box's headless checks: a token set before load is still checked by the server like any other.
+if (window.__OURS_TEST_SESSION__) S.testSession = true, startSession({ session: window.__OURS_TEST_SESSION__, expires_at: new Date(Date.now() + 3600e3).toISOString() });

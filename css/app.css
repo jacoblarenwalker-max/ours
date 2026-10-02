@@ -416,3 +416,22 @@ a.src:hover { text-decoration-color: currentColor; }
 .months-sec .mo-v small { font-size: 12.5px; }
 .months-sec .mo-key { font-size: 13px; margin-top: 14px; }
 .months-sec .mo-key .k { width: 12px; height: 9px; }
+
+/* ---------------------------------------------------------------- face id lock + devices */
+body.is-locked .nav-top, body.is-locked .nav-bottom, body.is-locked .status { visibility: hidden; }
+body.is-locked .main { padding-bottom: 40px; }
+.locked { max-width: 400px; margin: 10vh auto 0; padding: 0 4px; }
+.locked .lock-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 15px 20px; font-size: 16.5px; margin-top: 26px; }
+.locked .form .lock-btn { margin-top: 6px; }
+.locked .lock-btn .faceid { flex: none; }
+.locked .lock-msg { color: var(--warn); font-size: 14.5px; margin: 16px 0 0; line-height: 1.45; }
+.locked .lock-alt { margin: 26px 0 0; font-size: 14.5px; }
+.locked .lock-alt .linkish { color: var(--muted); }
+.locked .field-hint { font-size: 13px; margin: 2px 0 0; text-transform: none; letter-spacing: 0; }
+.dev-rows li.dev { align-items: center; }
+.dev-rows .name { flex: 1; display: grid; gap: 3px; min-width: 0; }
+.dev-meta { font-size: 13px; }
+.pill { display: inline-block; font-size: 11.5px; font-weight: 550; letter-spacing: 0.04em; color: var(--up-tint); border: 1px solid var(--green-line); border-radius: 999px; padding: 1px 8px; margin-left: 4px; vertical-align: 2px; }
+.btn.small { padding: 7px 13px; font-size: 13.5px; flex: none; }
+.invite-code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 34px; letter-spacing: 0.12em; text-align: center; margin: 14px 0 12px; color: var(--text); font-weight: 600; }
+body.away .main, body.away .top .status { filter: blur(18px); }
