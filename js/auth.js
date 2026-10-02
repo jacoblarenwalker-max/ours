@@ -1,19 +1,19 @@
 // Face ID / passkey sign-in (WebAuthn) against the ours-auth Edge Function.
 // The session token lives in memory only: every open, and every return after a few minutes away, asks again.
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js?v=12';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js?v=13';
 
 const FN = `${SUPABASE_URL}/functions/v1/ours-auth`;
 const enc = (buf) => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 const dec = (str) => { const s = String(str).replace(/-/g, '+').replace(/_/g, '/'); const bin = atob(s + '='.repeat((4 - (s.length % 4)) % 4)); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
 
-export class AuthError extends Error { constructor(code, message, status) { super(message || code); this.code = code; this.status = status; } }
+export class AuthError extends Error { constructor(code, message, status, data = {}) { super(message || code); this.code = code; this.status = status; this.data = data; } }
 
 export async function call(action, body = {}, timeoutMs = 20000) {
   const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch(FN, { method: 'POST', signal: ctrl.signal, cache: 'no-store', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_PUBLISHABLE_KEY }, body: JSON.stringify({ action, ...body }) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new AuthError(j.error || `http_${r.status}`, j.message, r.status);
+    if (!r.ok) throw new AuthError(j.error || `http_${r.status}`, j.message, r.status, j);
     return j;
   } catch (e) {
     if (e instanceof AuthError) throw e;
@@ -37,9 +37,10 @@ const friendly = (e) => {
   return e instanceof AuthError ? e : new AuthError('webauthn', (e && e.message) || 'Face ID did not work. Try again.');
 };
 
-// Register this device's platform passkey. Pass { key } (link key) or { invite } (setup code).
-export async function enroll(name, { key, invite } = {}) {
-  const { challengeId, options: o } = await call('reg-options', { name, key, invite });
+// Register this device's platform passkey. Pass { key } (link key), { invite } (setup code) or { session } (already unlocked,
+// e.g. with a backup code; oldSession is then signed out once Face ID is set up).
+export async function enroll(name, { key, invite, session, oldSession } = {}) {
+  const { challengeId, options: o } = await call('reg-options', { name, key, invite, session });
   let cred;
   try {
     cred = await navigator.credentials.create({ publicKey: {
@@ -53,7 +54,7 @@ export async function enroll(name, { key, invite } = {}) {
     clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
     response: { clientDataJSON: enc(r.clientDataJSON), attestationObject: enc(r.attestationObject), transports: r.getTransports ? r.getTransports() : [] },
   };
-  return call('reg-verify', { challengeId, response });
+  return call('reg-verify', { challengeId, response, oldSession });
 }
 
 // Face ID / Touch ID check with any Ours passkey on this device (discoverable credential).
@@ -69,5 +70,8 @@ export async function unlock() {
     clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
     response: { clientDataJSON: enc(r.clientDataJSON), authenticatorData: enc(r.authenticatorData), signature: enc(r.signature), userHandle: r.userHandle ? enc(r.userHandle) : undefined },
   };
-  return call('auth-verify', { challengeId, response });
+  return call('auth-verify', { challengeId, response, wantsCodes: true });
 }
+
+// One-time backup code (the way in when Face ID can't be used). Rate limited on the server.
+export const backupUnlock = (code) => call('backup-unlock', { code });

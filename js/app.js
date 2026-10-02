@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=12';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=13';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=12';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=12';
-import * as Auth from './auth.js?v=12';
+} from './logic.js?v=13';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=13';
+import * as Auth from './auth.js?v=13';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -15,7 +15,7 @@ const PAGES = [
   ['week', 'Week'], ['spend', 'Spend'], ['worth', 'Worth'], ['activity', 'Activity'], ['history', 'History'], ['plan', 'Plan'],
 ];
 const S = {
-  linkKey: null, session: null, sessionExp: 0, lockMode: 'unlock', lockMsg: '', lockBusy: false, devices: null, hiddenAt: 0,
+  linkKey: null, session: null, sessionExp: 0, via: 'passkey', backup: null, newCodes: null, backupNote: false, lockMode: 'unlock', lockMsg: '', lockBusy: false, devices: null, hiddenAt: 0,
   page: 'week', data: null, rows: [], busy: false, fromCache: false, loadError: null,
   spendPeriod: 'this', openCat: null, actFilter: 'all', actLimit: 80, editing: null, draftShape: 'car',
 };
@@ -92,7 +92,10 @@ let expTimer = null;
 function startSession(res) {
   S.session = res.session; S.sessionExp = Date.parse(res.expires_at) || Date.now() + 12 * 3600e3;
   S.lockMsg = ''; S.lockBusy = false; S.devices = null; S.hiddenAt = 0;
-  try { localStorage.setItem(ENROLLED, '1'); } catch {}
+  S.via = res.via === 'backup' ? 'backup' : 'passkey'; S.backupNote = S.via === 'backup';
+  if (res.backup) S.backup = res.backup;
+  if (res.backup_codes && res.backup_codes.length) S.newCodes = { codes: res.backup_codes, made: new Date().toISOString(), first: true };
+  if (S.via === 'passkey') try { localStorage.setItem(ENROLLED, '1'); } catch {}
   clearTimeout(expTimer);
   expTimer = setTimeout(() => lockNow('Signed out after 12 hours. Unlock again to keep going.', { revoke: false }), Math.min(Math.max(S.sessionExp - Date.now(), 1000), 2 ** 31 - 1));
   S.lastLoad = Date.now(); load();
@@ -100,6 +103,7 @@ function startSession(res) {
 function lockNow(msg = '', { revoke = true } = {}) {
   const tok = S.session;
   S.session = null; S.sessionExp = 0; S.data = null; S.rows = []; S.devices = null; S.editing = null; S.loadError = null;
+  S.via = 'passkey'; S.backup = null; S.newCodes = null; S.backupNote = false;
   planMemo = { rows: null, items: null, facts: null, out: null };
   clearTimeout(expTimer); clearTimeout(pollTimer); closeSheet();
   S.lockMode = 'unlock'; S.lockMsg = msg; S.lockBusy = false;
@@ -116,6 +120,47 @@ async function doUnlock() {
     if (e.code === 'unknown_device') { S.lockMode = 'setup'; S.lockMsg = "This device's Face ID isn't set up for Ours yet, or it was removed. Set it up below."; }
     else S.lockMsg = e.message;
     render();
+  }
+}
+const clock = (iso) => new Date(iso).toLocaleTimeString('en-US', { timeZone: TZ, hour: 'numeric', minute: '2-digit' });
+async function doBackup(form) {
+  if (S.lockBusy) return;
+  const code = String(form.code.value || '').trim();
+  if (!code) { S.lockMsg = 'Type one of your backup codes, like ABCDE-23456.'; return render(); }
+  S.lockBusy = true; S.lockMsg = ''; render();
+  try {
+    const res = await Auth.backupUnlock(code);
+    startSession(res);
+    const n = res.backup ? res.backup.remaining : null;
+    toast(n === null ? 'Opened with a backup code.' : `Opened with a backup code. ${n} ${n === 1 ? 'code' : 'codes'} left.`, 5000);
+  } catch (e) {
+    S.lockBusy = false;
+    S.lockMsg = e.code === 'too_many' && e.data && e.data.retry_at ? `${e.message} Try again after ${clock(e.data.retry_at)}.` : e.message;
+    render(); const f = $('#backup-code'); if (f) { f.value = code; }
+  }
+}
+function openReenroll() {
+  openSheet(`<h3>Set up Face ID on this device</h3>
+    <p>So next time Ours opens with Face ID instead of a backup code.</p>
+    <form id="reenroll-form" class="form" autocomplete="off">
+      <div class="field"><label for="reenroll-name">Name this device</label><input id="reenroll-name" name="name" maxlength="40" required autocomplete="off" placeholder="Jacob’s iPhone"></div>
+      <div class="btns"><button class="btn" type="submit">${FACE}<span>Set up Face ID</span></button><button type="button" class="btn ghost" data-close>Not now</button></div>
+    </form>`, () => {});
+  const f = $('#reenroll-name'); if (f) f.focus();
+}
+async function doReenroll(form) {
+  const name = form.name.value.trim().replace(/\s+/g, ' ');
+  if (!name) return toast('Give this device a name, like Jacob’s iPhone.');
+  const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
+  try {
+    const old = S.session;
+    const res = await Auth.enroll(name, { session: old, oldSession: old });
+    closeSheet(); startSession(res);
+    toast(`Face ID is set up on ${res.device ? res.device.name : 'this device'}.`);
+  } catch (e) {
+    btn.disabled = false;
+    if (e.code === 'locked') return lockNow('Your sign-in ended. Unlock again to keep going.', { revoke: false });
+    toast(e.message || "Couldn't set up Face ID. Try again.", 6000);
   }
 }
 function parseSetupCode(v) {
@@ -236,9 +281,10 @@ function render() {
   renderNav(); renderStatus();
   const main = $('#main');
   if (!S.session) { main.innerHTML = lockedView(); return; }
-  if (!S.data) { main.innerHTML = `<div class="page"><p class="empty">${S.busy ? 'Opening our notebook…' : "Couldn't reach our notebook. Check the connection and tap the refresh button."}</p></div>`; return; }
+  if (!S.data && !S.newCodes) { main.innerHTML = `<div class="page"><p class="empty">${S.busy ? 'Opening our notebook…' : "Couldn't reach our notebook. Check the connection and tap the refresh button."}</p></div>`; return; }
+  if (S.newCodes) { main.innerHTML = codesView(); return; }
   const view = { week: weekView, spend: spendView, worth: worthView, activity: activityView, history: historyView, plan: planView }[S.page];
-  main.innerHTML = `<div class="page">${view()}</div>`;
+  main.innerHTML = `<div class="page">${backupBanner()}${view()}</div>`;
 }
 function go(page) {
   if (page === S.page) return;
@@ -670,7 +716,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=12', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=13', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -1007,13 +1053,26 @@ function lockedView() {
   const busy = S.lockBusy;
   const msg = S.lockMsg ? `<p class="lock-msg" role="alert">${esc(S.lockMsg)}</p>` : '';
   const head = `<img class="mono" src="icons/icon-192.png?v=3" alt="">`;
-  if (S.lockMode !== 'setup') return `<div class="locked page" data-lock="unlock">
+  if (S.lockMode === 'unlock') return `<div class="locked page" data-lock="unlock">
     ${head}
     <h2>Ours is locked.</h2>
     <p>Unlock with Face ID to open our numbers.</p>
     <button type="button" class="btn lock-btn" data-unlock ${busy ? 'disabled' : ''}>${FACE}<span>${busy ? 'Checking…' : 'Unlock with Face ID'}</span></button>
+    <p class="lock-fine">If Face ID fails, your phone will offer your passcode.</p>
     ${msg}
-    <p class="lock-alt"><button type="button" class="linkish" data-lock-mode="setup">New phone or computer? Set up Face ID</button></p>
+    <p class="lock-alt"><button type="button" class="linkish" data-lock-mode="backup">Face ID not working? Use a backup code</button></p>
+    <p class="lock-alt lock-alt2"><button type="button" class="linkish" data-lock-mode="setup">New phone or computer? Set up Face ID</button></p>
+  </div>`;
+  if (S.lockMode === 'backup') return `<div class="locked page" data-lock="backup">
+    ${head}
+    <h2>Use a backup code</h2>
+    <p>One of the codes we saved when Ours was set up. Each code works once.</p>
+    <form id="backup-form" class="form" autocomplete="off">
+      <div class="field"><label for="backup-code">Backup code</label><input id="backup-code" name="code" required maxlength="16" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="ABCDE-23456" inputmode="text"></div>
+      <button class="btn lock-btn" type="submit" ${busy ? 'disabled' : ''}><span>${busy ? 'Checking…' : 'Open Ours'}</span></button>
+    </form>
+    ${msg}
+    <p class="lock-alt"><button type="button" class="linkish" data-lock-mode="unlock">Back to Face ID</button></p>
   </div>`;
   const needCode = !S.linkKey || S.needCode;
   return `<div class="locked page" data-lock="setup">
@@ -1030,6 +1089,59 @@ function lockedView() {
   </div>`;
 }
 
+// ---------------------------------------------------------------- backup codes
+function codesText() {
+  const c = S.newCodes;
+  return `Ours backup codes\nMade ${fmtStamp(c.made)} (Mountain time)\n\nIf Face ID isn't working, open Ours, tap "Face ID not working? Use a backup code" and type any one of these.\nEach code works once. Making new codes turns these off.\n\n${c.codes.map((x, i) => `${i + 1}. ${x}`).join('\n')}\n`;
+}
+function codesView() {
+  const c = S.newCodes;
+  return `<div class="page codes-page" data-codes>
+    <p class="kicker">${c.first ? 'Backup codes' : 'New backup codes'}</p>
+    <h2 class="page-title">Save these backup codes</h2>
+    <p class="lede">If Face ID ever stops working, or a phone is lost, any one of these opens Ours. Each works once.
+      <strong>Save these somewhere safe, like your Notes or a printed copy.</strong> They won't be shown again.</p>
+    <ol class="code-list">${c.codes.map((x) => `<li><code>${esc(x)}</code></li>`).join('')}</ol>
+    <div class="btns"><button type="button" class="btn ghost" data-codes-copy>Copy</button><button type="button" class="btn ghost" data-codes-download>Download</button></div>
+    <button type="button" class="btn wide" data-codes-done>I saved them</button>
+    <p class="faint" style="font-size:13px;margin:14px 2px 0">${c.first ? 'Both of us use the same codes. ' : 'The old codes no longer work. '}You can make new ones any time in Worth, under Devices with Face ID.</p>
+  </div>`;
+}
+async function copyCodes() {
+  try { await navigator.clipboard.writeText(codesText()); toast('Copied. Paste them into Notes.'); }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = codesText(); ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch {} ta.remove();
+    toast(ok ? 'Copied. Paste them into Notes.' : "Couldn't copy here. Use Download, or write them down.");
+  }
+}
+function downloadCodes() {
+  const url = URL.createObjectURL(new Blob([codesText()], { type: 'text/plain' }));
+  const a = document.createElement('a'); a.href = url; a.download = 'Ours backup codes.txt'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+function backupBanner() {
+  if (S.via !== 'backup' || !S.backupNote) return '';
+  const n = S.backup ? S.backup.remaining : null;
+  return `<div class="backup-note" role="status"><p><strong>Opened with a backup code.</strong>${n === null ? '' : ` ${n} ${n === 1 ? 'code' : 'codes'} left.`} Set up Face ID on this device so next time it opens normally.</p>
+    <div class="btns"><button type="button" class="btn small" data-reenroll>Set up Face ID</button><button type="button" class="btn ghost small" data-backup-note-close>Not now</button></div></div>`;
+}
+function confirmNewCodes() {
+  openSheet(`<h3>Make new backup codes?</h3><p>You'll get 8 new codes to save. The old ones, used or not, stop working right away.</p>
+    <div class="btns"><button type="button" class="btn" data-confirm>Make new codes</button><button type="button" class="btn ghost" data-close>Cancel</button></div>`,
+  async (e) => {
+    if (!e.target.closest('[data-confirm]')) return;
+    closeSheet();
+    try {
+      const r = await Auth.call('backup-new', { session: S.session });
+      S.backup = r.backup; S.newCodes = { codes: r.codes, made: new Date().toISOString(), first: false }; render(); window.scrollTo({ top: 0 });
+    } catch (err) {
+      if (err.code === 'locked') return lockNow('Your sign-in ended. Unlock again to keep going.', { revoke: false });
+      toast("Couldn't make new codes. The old ones still work. Try again.");
+    }
+  });
+}
+
 // ---------------------------------------------------------------- devices
 const shortDay = (iso) => new Date(iso).toLocaleDateString('en-US', { timeZone: TZ, month: 'short', day: 'numeric', year: new Date(iso).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
 function devicesBlock() {
@@ -1044,8 +1156,14 @@ function devicesBlock() {
   return `<section class="section" id="devices">
     <p class="kicker">Devices with Face ID</p>
     <div class="card"><ul class="rows dev-rows">${rows}</ul>
+      ${S.via === 'backup' ? '<p class="muted" style="font-size:14px;margin:12px 0 0">This device is open with a backup code. <button type="button" class="linkish" data-reenroll>Set up Face ID here</button></p>' : ''}
       <p class="faint" style="font-size:13px;margin:12px 0 0">Only these can open Ours. Sign-in lasts up to 12 hours and locks again after 5 minutes away.</p>
       <div class="btns" style="margin-top:14px"><button type="button" class="btn" data-dev-invite>Add a device</button><button type="button" class="btn ghost" data-lock-now>Lock now</button></div>
+    </div>
+    <div class="card backup-card">
+      <div class="backup-row"><span class="name">Backup codes<span class="faint dev-meta">${S.backup ? (S.backup.total ? `${S.backup.remaining} of ${S.backup.total} left${S.backup.made_at ? ` · made ${shortDay(S.backup.made_at)}` : ''}` : 'None yet') : 'Loading…'}</span></span>
+      <button type="button" class="btn ghost small" data-codes-new>New codes</button></div>
+      <p class="faint" style="font-size:13px;margin:10px 0 0">${S.backup && S.backup.total && S.backup.remaining <= 2 ? '<span class="warn">Running low. Make new ones so there is always a way in.</span> ' : ''}Each opens Ours once if Face ID isn't working. Making new codes turns off the old ones.</p>
     </div>
   </section>`;
 }
@@ -1053,7 +1171,7 @@ let devLoading = false;
 async function loadDevices() {
   if (devLoading || !S.session) return;
   devLoading = true;
-  try { const r = await Auth.call('devices', { session: S.session }); S.devices = r.devices || []; }
+  try { const r = await Auth.call('devices', { session: S.session }); S.devices = r.devices || []; if (r.backup) S.backup = r.backup; if (r.via) S.via = r.via; }
   catch (e) { if (e.code === 'locked') { devLoading = false; return lockNow('Your sign-in ended. Unlock again to keep going.', { revoke: false }); } S.devices = S.devices || []; }
   devLoading = false;
   if (S.session && S.page === 'worth') { const y = window.scrollY; render(); window.scrollTo({ top: y }); }
@@ -1114,8 +1232,14 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
   const t = e.target;
   if (t.closest('[data-unlock]')) { doUnlock(); return; }
-  const lm = t.closest('[data-lock-mode]'); if (lm) { S.lockMode = lm.dataset.lockMode; S.lockMsg = ''; render(); const f = $('#enroll-name'); if (f) f.focus(); return; }
+  const lm = t.closest('[data-lock-mode]'); if (lm) { S.lockMode = lm.dataset.lockMode; S.lockMsg = ''; render(); const f = $('#enroll-name') || $('#backup-code'); if (f) f.focus(); return; }
   if (t.closest('[data-lock-now]')) { lockNow(''); return; }
+  if (t.closest('[data-codes-copy]')) { copyCodes(); return; }
+  if (t.closest('[data-codes-download]')) { downloadCodes(); return; }
+  if (t.closest('[data-codes-done]')) { S.newCodes = null; render(); window.scrollTo({ top: 0 }); return; }
+  if (t.closest('[data-codes-new]')) { confirmNewCodes(); return; }
+  if (t.closest('[data-reenroll]')) { openReenroll(); return; }
+  if (t.closest('[data-backup-note-close]')) { S.backupNote = false; render(); return; }
   if (t.closest('[data-dev-invite]')) { openInvite(); return; }
   const dr = t.closest('[data-dev-remove]'); if (dr) { confirmRemoveDevice(dr.dataset.devRemove); return; }
   if (!S.session) return;
@@ -1154,6 +1278,8 @@ document.addEventListener('submit', (e) => {
     saveTarget(Math.round(n * 100) / 100);
   }
   if (e.target.id === 'enroll') { e.preventDefault(); doEnroll(e.target); }
+  if (e.target.id === 'backup-form') { e.preventDefault(); doBackup(e.target); }
+  if (e.target.id === 'reenroll-form') { e.preventDefault(); doReenroll(e.target); }
 });
 $('#refresh').addEventListener('click', () => { if (!S.session) return; if (!S.facts) loadFacts(); load({ manual: true }); });
 window.addEventListener('popstate', () => { const { p } = readHash(); S.page = PAGES.some(([id]) => id === p) ? p : 'week'; render(); });

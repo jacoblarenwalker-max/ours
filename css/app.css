@@ -435,3 +435,23 @@ body.is-locked .main { padding-bottom: 40px; }
 .btn.small { padding: 7px 13px; font-size: 13.5px; flex: none; }
 .invite-code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 34px; letter-spacing: 0.12em; text-align: center; margin: 14px 0 12px; color: var(--text); font-weight: 600; }
 body.away .main, body.away .top .status { filter: blur(18px); }
+
+/* ---------------------------------------------------------------- backup codes */
+.locked .lock-fine { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+.locked .lock-alt2 { margin-top: 12px; }
+.btn .faceid { vertical-align: -5px; margin-right: 8px; }
+.codes-page { max-width: 520px; margin: 0 auto; }
+.codes-page .lede { color: var(--muted); font-size: 15px; line-height: 1.5; margin: 6px 0 18px; }
+.codes-page .lede strong { color: var(--text); font-weight: 550; }
+.code-list { list-style: none; counter-reset: c; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 18px; margin: 0 0 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); }
+.code-list li { counter-increment: c; display: flex; align-items: baseline; gap: 8px; }
+.code-list li::before { content: counter(c); color: var(--faint, #8a847a); font-size: 12px; width: 14px; text-align: right; }
+.code-list code { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 17px; letter-spacing: 0.06em; color: var(--text); font-weight: 600; }
+@media (max-width: 360px) { .code-list { grid-template-columns: 1fr; } }
+.btn.wide { width: 100%; margin-top: 14px; padding: 14px 20px; font-size: 16px; }
+.backup-note { background: var(--card); border: 1px solid var(--green-line); border-radius: var(--r); padding: 14px 16px; margin: 14px 0 4px; }
+.backup-note p { margin: 0 0 10px; font-size: 14.5px; color: var(--muted); line-height: 1.45; }
+.backup-note strong { color: var(--text); font-weight: 550; }
+.backup-card { margin-top: 12px; }
+.backup-row { display: flex; align-items: center; gap: 10px; }
+.backup-row .name { flex: 1; display: grid; gap: 3px; }
