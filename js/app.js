@@ -2,7 +2,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS } from './con
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=5';
+} from './logic.js?v=6';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
