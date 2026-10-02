@@ -393,3 +393,15 @@ a.src:hover { text-decoration-color: currentColor; }
 .trends a.src { font-size: 13px; justify-self: start; }
 .plan-foot a.src { color: var(--muted); }
 @media (max-width: 400px) { .nav-bottom a { font-size: 10.5px; } }
+
+/* ---------- Week hero: this week first ---------- */
+.week-hero { padding: 22px 0 4px; }
+.week-hero .kicker { margin-bottom: 12px; }
+.wh-grid { display: grid; gap: 12px; }
+.week-hero .t-big { font-size: clamp(54px, 15vw, 80px); }
+.week-hero .sofar .tile .num { font-size: clamp(28px, 7.5vw, 38px); }
+@media (min-width: 720px) {
+  .wh-grid { grid-template-columns: 1.65fr 1fr; align-items: stretch; }
+  .wh-grid .sofar { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+  .wh-grid .sofar .tile { display: flex; flex-direction: column; justify-content: center; }
+}

@@ -2,8 +2,8 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS } from './con
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=8';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=8';
+} from './logic.js?v=9';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=9';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -245,23 +245,23 @@ function gapsBlock() {
 
 // ---------------------------------------------------------------- Week
 function weekView() {
-  const w = worth(snap(), S.data.items || []);
-  let html = staleBanner() + heroBlock(w);
-  if (!snap()) return html + ownBlock(w) + '<section class="section"><p class="empty">The weekly letter shows up after the first bank pull.</p></section>';
+  // Week opens with this week: the target as the hero, Spent and Earned right beside it. Net worth lives on Worth.
+  const ws = weekStart(today());
+  const tw = summarize(S.rows, ws, today());
+  let html = staleBanner();
+  if (!snap()) return html + weekHero(tw, null) + '<section class="section"><p class="empty">The weekly letter shows up after the first bank pull.</p></section>';
   const L = buildLetter(S.rows, today(), snap().coverage && snap().coverage.from);
   const last = L.last;
   const top = last.cats.slice(0, 3).map(([c, v]) => `${CATS[c].label} ${m0(v)}`).join(' · ') || 'Nothing yet';
   const verdictClass = { more: 'down', less: 'up', same: '', none: 'muted' }[L.verdict];
   const pick = L.storyPick;
-  const ws = weekStart(today());
-  const tw = summarize(S.rows, ws, today());
   const target = targetOf();
   const lastVs = vsTarget(last.spend, target);
   const lw = `${L.lastWs}|${addDays(L.lastWs, 6)}|Last week`;
   const li = (sheet, t, v, cls = '') => sheet
     ? `<li class="tap" role="button" tabindex="0" data-sheet="${sheet}"><span class="t">${t}</span><span class="v ${cls}">${v}</span>${CHEV}</li>`
     : `<li><span class="t">${t}</span><span class="v ${cls}">${v}</span></li>`;
-  html += targetBlock(tw, L) + ownBlock(w);
+  html += weekHero(tw, L);
   html += `
   <section class="section">
     <article class="letter">
@@ -280,18 +280,22 @@ function weekView() {
       </ol>
     </article>
   </section>
-  <section class="section">
-    <p class="kicker">This week so far · ${shortDate(ws)} to today</p>
-    <div class="sofar">
-      <button type="button" class="tile" data-sheet="spent|${ws}|${today()}|This week so far|cat"><div class="label">Spent</div><div class="num">${m0(tw.spend)}</div>${tw.pending > 0 ? `<div class="warn" style="font-size:13px;margin-top:4px">Includes ${m2(tw.pending)} still pending</div>` : ''}<div class="tap-hint">${tw.items.length ? 'See purchases' : 'Nothing yet'} ${CHEV}</div></button>
-      <button type="button" class="tile" data-sheet="income|${ws}|${today()}|This week so far"><div class="label">Earned</div><div class="num ${tw.income > 0 ? 'up' : ''}">${m0(tw.income)}</div><div class="tap-hint">${tw.incomeRows.length ? 'See sources' : 'Nothing in yet'} ${CHEV}</div></button>
-    </div>
-  </section>
   ${gapsBlock()}`;
   return html;
 }
 
 // ---------------------------------------------------------------- weekly target
+function weekHero(tw, L) {
+  const ws = weekStart(today());
+  const tiles = `<div class="sofar">
+      <button type="button" class="tile" data-sheet="spent|${ws}|${today()}|This week so far|cat"><div class="label">Spent</div><div class="num">${m0(tw.spend)}</div>${tw.pending > 0 ? `<div class="warn" style="font-size:13px;margin-top:4px">Includes ${m2(tw.pending)} still pending</div>` : ''}<div class="tap-hint">${tw.items.length ? 'See purchases' : 'Nothing yet'} ${CHEV}</div></button>
+      <button type="button" class="tile" data-sheet="income|${ws}|${today()}|This week so far"><div class="label">Earned</div><div class="num ${tw.income > 0 ? 'up' : ''}">${m0(tw.income)}</div><div class="tap-hint">${tw.incomeRows.length ? 'See sources' : 'Nothing in yet'} ${CHEV}</div></button>
+    </div>`;
+  return `<section class="week-hero">
+    <p class="kicker">This week · ${shortDate(ws)} to today</p>
+    <div class="wh-grid">${targetBlock(tw, L || { usual: null }).replace(/^<section class="section">|<\/section>$/g, '')}${tiles}</div>
+  </section>`;
+}
 function targetOf() { const v = S.data && S.data.settings ? Number(S.data.settings.weekly_target) : NaN; return v > 0 ? v : null; }
 const suggestTarget = (usual) => (usual && usual >= 1 ? Math.max(10, Math.round(usual / 10) * 10) : null);
 // Days left in this Mon–Sun week, counting today.
@@ -596,7 +600,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=8', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=9', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
