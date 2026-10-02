@@ -1,8 +1,8 @@
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS } from './config.js';
 import {
-  TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, vsTarget, targetSentence,
+  TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=4';
+} from './logic.js?v=5';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -17,6 +17,7 @@ const S = {
 
 // ---------------------------------------------------------------- utils
 const $ = (s, el = document) => el.querySelector(s);
+const CHEV = '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg>';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const m0 = (n) => (n < -0.004 ? '−' : '') + '$' + Math.round(Math.abs(n)).toLocaleString('en-US');
 const m2 = (n) => (n < -0.004 ? '−' : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -184,14 +185,18 @@ function staleBanner() {
   return '';
 }
 function heroBlock(w) {
+  const has = !!snap() || (S.data.items || []).length;
+  const tile = (kind, label, val, cls, hint) => has
+    ? `<button type="button" class="tile" data-sheet="${kind}"><div class="label">${label}</div><div class="num ${cls}">${m0(val)}</div><div class="tap-hint">${hint} ${CHEV}</div></button>`
+    : `<div class="tile"><div class="label">${label}</div><div class="num ${cls}">${m0(val)}</div></div>`;
   return `
   <section class="hero">
     <p class="kicker">What's left</p>
     <p class="big">${bigMoney(w.left)}</p>
     <p class="hero-note">What we own minus what we owe${w.stuff || w.owedItems ? ', including the things we added' : ''}.</p>
     <div class="tiles">
-      <div class="tile"><div class="label">We own</div><div class="num">${m0(w.own)}</div></div>
-      <div class="tile"><div class="label">We owe</div><div class="num ${w.owe > 0 ? 'down' : ''}">${m0(w.owe)}</div></div>
+      ${tile('own', 'We own', w.own, '', 'What adds up')}
+      ${tile('owe', 'We owe', w.owe, w.owe > 0 ? 'down' : '', w.owe > 0 ? 'What adds up' : 'Nothing owed')}
     </div>
   </section>`;
 }
@@ -204,7 +209,7 @@ function donut(parts, size = 148) {
       const len = (p.value / total) * c; const gap = parts.filter((x) => x.value > 0).length > 1 ? 2.5 : 0;
       const arc = (color, width) => `<circle cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${color}" stroke-width="${width}" stroke-dasharray="${Math.max(0, len - gap)} ${c}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cx})"/>`;
       // deep fills (Everest green) get a thin lighter edge so they still read against the card
-      const a = p.edge ? arc(p.edge, 16) + arc(p.color, 13) : arc(p.color, 16);
+      const a = `<g class="seg-arc" data-sheet="own|${p.slice}"><title>${esc(p.name)}</title>${p.edge ? arc(p.edge, 16) + arc(p.color, 13) : arc(p.color, 16)}</g>`;
       off += len; return a;
     }).join('');
   const top = parts.filter((p) => p.value > 0).sort((a, b) => b.value - a.value)[0];
@@ -213,9 +218,9 @@ function donut(parts, size = 148) {
 }
 function ownBlock(w, onWorth = false) {
   const parts = [
-    { name: 'Cash in the bank', short: 'cash', value: w.cash, color: '#16382c', edge: '#3a7a5e' },
-    { name: 'Investments', short: 'invested', value: w.invest, color: '#d4c6a4' },
-    { name: 'Things we added', short: 'things', value: w.stuff, color: '#b3a892' },
+    { slice: 'cash', name: 'Cash in the bank', short: 'cash', value: w.cash, color: '#16382c', edge: '#3a7a5e' },
+    { slice: 'invest', name: 'Investments', short: 'invested', value: w.invest, color: '#d4c6a4' },
+    { slice: 'stuff', name: 'Things we added', short: 'things', value: w.stuff, color: '#b3a892' },
   ];
   const total = parts.reduce((s, p) => s + Math.max(0, p.value), 0) || 1;
   return `
@@ -224,7 +229,7 @@ function ownBlock(w, onWorth = false) {
     <div class="card own">
       ${donut(parts)}
       <ul class="rows">
-        ${parts.map((p) => `<li><span class="dot" style="background:${p.color}"></span><span class="name">${p.name}</span><span class="amt">${m0(p.value)}</span><span class="pct">${Math.round((Math.max(0, p.value) / total) * 100)}%</span></li>`).join('')}
+        ${parts.map((p) => `<li class="tap" role="button" tabindex="0" data-sheet="own|${p.slice}"><span class="dot" style="background:${p.color}"></span><span class="name">${p.name}</span><span class="amt">${m0(p.value)}</span><span class="pct">${Math.round((Math.max(0, p.value) / total) * 100)}%</span>${CHEV}</li>`).join('')}
       </ul>
     </div>
     ${w.stuff || onWorth ? '' : '<p class="muted" style="margin:10px 2px 0;font-size:14px">No car or house added yet. <a href="#" data-page="worth" class="warn">Add one on Worth</a>.</p>'}
@@ -239,16 +244,22 @@ function gapsBlock() {
 // ---------------------------------------------------------------- Week
 function weekView() {
   const w = worth(snap(), S.data.items || []);
-  let html = staleBanner() + heroBlock(w) + ownBlock(w);
-  if (!snap()) return html + '<section class="section"><p class="empty">The weekly letter shows up after the first bank pull.</p></section>';
+  let html = staleBanner() + heroBlock(w);
+  if (!snap()) return html + ownBlock(w) + '<section class="section"><p class="empty">The weekly letter shows up after the first bank pull.</p></section>';
   const L = buildLetter(S.rows, today(), snap().coverage && snap().coverage.from);
   const last = L.last;
   const top = last.cats.slice(0, 3).map(([c, v]) => `${CATS[c].label} ${m0(v)}`).join(' · ') || 'Nothing yet';
   const verdictClass = { more: 'down', less: 'up', same: '', none: 'muted' }[L.verdict];
   const pick = L.storyPick;
-  const tw = summarize(S.rows, weekStart(today()), today());
+  const ws = weekStart(today());
+  const tw = summarize(S.rows, ws, today());
   const target = targetOf();
   const lastVs = vsTarget(last.spend, target);
+  const lw = `${L.lastWs}|${addDays(L.lastWs, 6)}|Last week`;
+  const li = (sheet, t, v, cls = '') => sheet
+    ? `<li class="tap" role="button" tabindex="0" data-sheet="${sheet}"><span class="t">${t}</span><span class="v ${cls}">${v}</span>${CHEV}</li>`
+    : `<li><span class="t">${t}</span><span class="v ${cls}">${v}</span></li>`;
+  html += targetBlock(tw, L) + ownBlock(w);
   html += `
   <section class="section">
     <article class="letter">
@@ -257,23 +268,22 @@ function weekView() {
       <p class="normal"><b class="${verdictClass}">Is this normal?</b> ${esc(L.normal)}</p>
       ${lastVs ? `<p class="tline ${lastVs.state}"><b>Our target</b> ${esc(targetSentence(last.spend, target))}</p>` : ''}
       <ol class="numbered">
-        <li><span class="t">Consumer spending</span><span class="v">${m2(last.spend)}${last.pending > 0 ? ` <small class="warn">Includes ${m2(last.pending)} still pending</small>` : ''}</span></li>
-        <li><span class="t">vs last week</span><span class="v ${L.vsPrev > 0.5 ? 'down' : L.vsPrev < -0.5 ? 'up' : ''}">${Math.abs(L.vsPrev) < 0.5 ? 'About the same' : `${m2(Math.abs(L.vsPrev))} ${L.vsPrev > 0 ? 'more' : 'less'}`} <small>than the week before (${m2(L.prev.spend)})</small></span></li>
-        <li><span class="t">Top categories</span><span class="v">${esc(top)}</span></li>
-        <li><span class="t">Story item</span><span class="v">${pick ? `${esc(pick.label)} · ${m2(pick.spend)} <small>${weekdayName(pick.date)}${pick.note ? ` · “${esc(pick.note)}”` : ''}</small>` : 'Nothing stood out.'}</span></li>
-        <li><span class="t">Investing</span><span class="v">${last.investing > 0 ? `${m2(last.investing)} <small>into Bitcoin (River). Not spending.</small>` : 'Nothing this week.'}</span></li>
-        <li><span class="t">Income received</span><span class="v"><button type="button" class="linkish ${last.income > 0 ? 'up' : ''}" data-income="${L.lastWs}|${addDays(L.lastWs, 6)}|Last week">${m2(last.income)}</button> <small>${last.incomeRows.length ? 'Tap to see who paid us.' : 'Nothing came in.'}</small></span></li>
-        <li><span class="t">Transfers and card payments</span><span class="v">${m2(last.transfers)} <small>moved between our accounts</small> · ${m2(last.cardPayments)} <small>paid to cards. Not new spending.</small></span></li>
+        ${li(last.items.length ? `spent|${lw}|day` : '', 'Consumer spending', `${m2(last.spend)}${last.pending > 0 ? ` <small class="warn">Includes ${m2(last.pending)} still pending</small>` : ''}`)}
+        ${li('vs', 'vs last week', `${Math.abs(L.vsPrev) < 0.5 ? 'About the same' : `${m2(Math.abs(L.vsPrev))} ${L.vsPrev > 0 ? 'more' : 'less'}`} <small>than the week before (${m2(L.prev.spend)})</small>`, L.vsPrev > 0.5 ? 'down' : L.vsPrev < -0.5 ? 'up' : '')}
+        ${li(last.cats.length ? `spent|${lw}|cat` : '', 'Top categories', esc(top))}
+        ${li(pick ? `tx|${pick.id}` : '', 'Story item', pick ? `${esc(pick.label)} · ${m2(pick.spend)} <small>${weekdayName(pick.date)}${pick.note ? ` · “${esc(pick.note)}”` : ''}</small>` : 'Nothing stood out.')}
+        ${li(last.investRows.length ? `invest|${lw}` : '', 'Investing', last.investing > 0 ? `${m2(last.investing)} <small>into Bitcoin (River). Not spending.</small>` : 'Nothing this week.')}
+        ${li(last.incomeRows.length ? `income|${lw}` : '', 'Income received', `${m2(last.income)}${last.incomeRows.length ? '' : ' <small>Nothing came in.</small>'}`, last.income > 0 ? 'up' : '')}
+        ${li(last.transferRows.length || last.cardRows.length ? `moves|${lw}` : '', 'Transfers and card payments', `${m2(last.transfers)} <small>moved between our accounts</small> · ${m2(last.cardPayments)} <small>paid to cards. Not new spending.</small>`)}
       </ol>
     </article>
   </section>
   <section class="section">
-    <p class="kicker">This week so far · ${shortDate(weekStart(today()))} to today</p>
+    <p class="kicker">This week so far · ${shortDate(ws)} to today</p>
     <div class="sofar">
-      <div class="tile"><div class="label">Spent</div><div class="num">${m0(tw.spend)}</div>${tw.pending > 0 ? `<div class="warn" style="font-size:13px;margin-top:4px">Includes ${m2(tw.pending)} still pending</div>` : ''}</div>
-      <button type="button" class="tile" data-income="${weekStart(today())}|${today()}|This week so far"><div class="label">Earned</div><div class="num ${tw.income > 0 ? 'up' : ''}">${m0(tw.income)}</div><div class="tap-hint">${tw.incomeRows.length ? 'See sources' : 'Nothing in yet'} <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5"/></svg></div></button>
+      <button type="button" class="tile" data-sheet="spent|${ws}|${today()}|This week so far|cat"><div class="label">Spent</div><div class="num">${m0(tw.spend)}</div>${tw.pending > 0 ? `<div class="warn" style="font-size:13px;margin-top:4px">Includes ${m2(tw.pending)} still pending</div>` : ''}<div class="tap-hint">${tw.items.length ? 'See purchases' : 'Nothing yet'} ${CHEV}</div></button>
+      <button type="button" class="tile" data-sheet="income|${ws}|${today()}|This week so far"><div class="label">Earned</div><div class="num ${tw.income > 0 ? 'up' : ''}">${m0(tw.income)}</div><div class="tap-hint">${tw.incomeRows.length ? 'See sources' : 'Nothing in yet'} ${CHEV}</div></button>
     </div>
-    ${targetBlock(tw, L)}
   </section>
   ${gapsBlock()}`;
   return html;
@@ -282,23 +292,36 @@ function weekView() {
 // ---------------------------------------------------------------- weekly target
 function targetOf() { const v = S.data && S.data.settings ? Number(S.data.settings.weekly_target) : NaN; return v > 0 ? v : null; }
 const suggestTarget = (usual) => (usual && usual >= 1 ? Math.max(10, Math.round(usual / 10) * 10) : null);
+// Days left in this Mon–Sun week, counting today.
+const daysLeftInWeek = () => 7 - daysBetween(weekStart(today()), today());
 function targetBlock(tw, L) {
   const target = targetOf();
   if (!target) {
     const s = suggestTarget(L.usual);
-    return `<div class="target unset"><p>Set a weekly spending target to see how the week is going.${s ? ` Our usual week is about ${m0(L.usual)}, a good place to start.` : ''}</p>
-      <button type="button" class="btn ghost" data-target-edit>Set a target</button></div>`;
+    return `<section class="section"><div class="target-card unset">
+      <p class="label">Weekly target</p>
+      <h3 class="t-ask">Pick one number for the week.</h3>
+      <p class="t-why">It counts real purchases only, like the letter.${s ? ` Our usual week is about ${m0(L.usual)}, so ${m0(s)} is a fair place to start.` : ''}</p>
+      <button type="button" class="btn" data-target-edit>Set a target</button>
+    </div></section>`;
   }
   const v = vsTarget(tw.spend, target);
+  const dl = daysLeftInWeek();
   const pct = Math.min(100, (tw.spend / target) * 100);
-  const line = v.state === 'over' ? `${m0(tw.spend)} of ${m0(target)}. ${m0(v.diff)} over for the week. A fresh week starts Monday.`
-    : v.state === 'at' ? `${m0(tw.spend)} of ${m0(target)}. Right at the target.`
-    : `${m0(tw.spend)} of ${m0(target)}. ${m0(v.diff)} left for the week.`;
-  return `<div class="target ${v.state}">
-    <div class="target-top"><span class="label">Weekly target</span><button type="button" class="linkish target-edit" data-target-edit>Change</button></div>
-    <div class="tbar" role="img" aria-label="${esc(line)}"><span style="width:${Math.max(pct, tw.spend > 0 ? 2 : 0).toFixed(1)}%"></span></div>
-    <p class="tline-now ${v.state === 'over' ? 'down' : ''}">${line}</p>
-  </div>`;
+  const big = v.state === 'over' ? `<span class="down">${m0(v.diff)}</span> <span class="t-big-sub">over this week</span>`
+    : v.state === 'at' ? `${m0(0)} <span class="t-big-sub">left. Right on target.</span>`
+    : `${m0(v.diff)} <span class="t-big-sub">left this week</span>`;
+  const pace = v.state === 'under'
+    ? (dl === 1 ? `Today is the last day. ${m0(v.diff)} to go.` : `About ${m0(v.diff / dl)} a day for the rest of the week.`)
+    : v.state === 'at' ? 'Right on the number. A fresh week starts Monday.' : 'It happens. A fresh week starts Monday.';
+  return `<section class="section"><div class="target-card ${v.state}" role="button" tabindex="0" data-sheet="target">
+    <div class="target-top"><span class="label">Weekly target · ${m0(target)}</span><button type="button" class="linkish target-edit" data-target-edit>Change</button></div>
+    <p class="t-big">${big}</p>
+    <div class="tbar thick" role="img" aria-label="${m0(tw.spend)} of ${m0(target)} spent"><span style="width:${Math.max(pct, tw.spend > 0 ? 1.5 : 0).toFixed(1)}%"></span></div>
+    <div class="t-meta"><span>${m0(tw.spend)} of ${m0(target)} spent</span><span>${dl} ${dl === 1 ? 'day' : 'days'} left</span></div>
+    <p class="t-pace">${pace}</p>
+    <div class="tap-hint">By day ${CHEV}</div>
+  </div></section>`;
 }
 function openTargetSheet() {
   const target = targetOf();
@@ -539,6 +562,8 @@ function historyView() {
     if (Math.abs(d) < 1) return '<span class="muted">same</span>';
     return `<span class="${d > 0 ? 'down' : 'up'}">${d > 0 ? '+' : '−'}${m0(Math.abs(d))}</span>`;
   };
+  const wkTitle = (r) => (r.current ? 'This week so far' : 'Week');
+  const cell = (kind, r, val, cls, n) => n ? `<button type="button" class="linkish ${cls}" data-sheet="${kind}|${r.w.from}|${r.current ? today() : r.w.to}|${wkTitle(r)}${kind === 'spent' ? '|cat' : ''}">${m0(val)}</button>` : `<span class="${cls}">${m0(val)}</span>`;
   const target = targetOf();
   const mark = (r) => {
     const v = vsTarget(r.w.spend, target);
@@ -547,40 +572,190 @@ function historyView() {
   };
   if (target) html = html.replace('Monday to Sunday, Mountain time.', `Monday to Sunday, Mountain time. Each week is marked against our ${m0(target)} target.`);
   html += `<table class="hist"><thead><tr><th>Week</th><th>Spending</th><th>vs week before</th><th>Income</th><th>Investing</th></tr></thead><tbody>
-    ${rowsData.map((r) => `<tr class="${r.current ? 'current' : ''}"><td>${weekLabel(r.w.from)}</td><td>${mark(r)}${m0(r.w.spend)}</td><td>${vs(r)}</td><td><button type="button" class="linkish ${r.w.income > 0 ? 'up' : 'faint'}" data-income="${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></td><td class="${r.w.investing > 0 ? 'warn' : 'faint'}">${m0(r.w.investing)}</td></tr>`).join('')}
+    ${rowsData.map((r) => `<tr class="${r.current ? 'current' : ''}"><td>${weekLabel(r.w.from)}</td><td>${mark(r)}${cell('spent', r, r.w.spend, '', r.w.items.length)}</td><td>${vs(r)}</td><td><button type="button" class="linkish ${r.w.income > 0 ? 'up' : 'faint'}" data-sheet="income|${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></td><td>${cell('invest', r, r.w.investing, r.w.investing > 0 ? 'warn' : 'faint', r.w.investRows.length)}</td></tr>`).join('')}
   </tbody></table>
-  <div class="hist-cards">${rowsData.map((r) => `<div class="hcard"><div class="top-row"><span class="wk">${weekLabel(r.w.from)}${r.current ? ' <span class="faint">· so far</span>' : ''}</span><span class="sp">${mark(r)}${m0(r.w.spend)}</span></div>
-    <div class="meta"><span>vs before ${vs(r)}</span><span>In <button type="button" class="linkish ${r.w.income > 0 ? 'up' : ''}" data-income="${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></span><span>Invested <span class="${r.w.investing > 0 ? 'warn' : ''}">${m0(r.w.investing)}</span></span></div></div>`).join('')}</div>
+  <div class="hist-cards">${rowsData.map((r) => `<div class="hcard"><div class="top-row"><span class="wk">${weekLabel(r.w.from)}${r.current ? ' <span class="faint">· so far</span>' : ''}</span><span class="sp">${mark(r)}${cell('spent', r, r.w.spend, 'sp-btn', r.w.items.length)}</span></div>
+    <div class="meta"><span>vs before ${vs(r)}</span><span>In <button type="button" class="linkish ${r.w.income > 0 ? 'up' : ''}" data-sheet="income|${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></span><span>Invested ${cell('invest', r, r.w.investing, r.w.investing > 0 ? 'warn' : '', r.w.investRows.length)}</span></div></div>`).join('')}</div>
   <p class="foot">Activity starts ${shortDate(from)}${from.slice(0, 4) !== t.slice(0, 4) ? ' ' + from.slice(0, 4) : ''}, so the oldest week may be partial.</p>`;
   return html;
 }
 
-// ---------------------------------------------------------------- earned sheet
-// Uses the same summarize() as the letter and History, so the total here always matches the number tapped.
-function openIncomeSheet(from, to, title) {
-  const s = summarize(S.rows, from, to);
-  const groups = new Map();
-  for (const r of s.incomeRows) {
-    const g = groups.get(r.key) || { label: r.label, total: 0, rows: [] };
-    g.total += r.amount; g.rows.push(r); groups.set(r.key, g);
-  }
-  const list = [...groups.values()].sort((a, b) => b.total - a.total);
-  list.forEach((g) => g.rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)));
-  const range = to >= today() && from <= today() ? `${shortDate(from)} to today` : `${shortDate(from)} – ${shortDate(to)}`;
-  const n = s.incomeRows.length;
-  const body = !n ? '<p class="empty" style="margin-top:18px">Nothing came in during these days. Transfers between our own accounts and card refunds are not counted as income.</p>' :
-    list.map((g) => {
-      const accts = [...new Set(g.rows.map((r) => (r.acct ? r.acct.display : '')))].filter(Boolean);
-      return `<div class="inc-group"><div class="inc-head"><span class="n">${esc(g.label)}<small>${g.rows.length} ${g.rows.length === 1 ? 'deposit' : 'deposits'}${accts.length === 1 ? ` · into ${esc(accts[0])}` : ''}</small></span><span class="t ${g.total > 0 ? 'up' : ''}">${m2(g.total)}</span></div>
-        <ul class="inc-rows">${g.rows.map((r) => `<li><span class="w">${weekdayName(r.date).slice(0, 3)} ${shortDate(r.date)}${accts.length === 1 ? '' : ` · ${esc(r.acct ? r.acct.display : '')}`}${r.pending ? ' · pending' : ''}${r.note ? ` · “${esc(r.note)}”` : ''}</span><span class="a">${signed(r.amount)}</span></li>`).join('')}</ul></div>`;
-    }).join('');
-  openSheet(`<button type="button" class="iconbtn sheet-x" data-close aria-label="Close"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
-    <p class="kicker" style="margin-bottom:4px">${esc(title)} · ${range}</p>
-    <h3>Where the money came from</h3>
-    <div class="inc-total ${s.income > 0 ? 'up' : ''}">${m2(s.income)}</div>
-    <p class="muted" style="margin:0;font-size:14px">${n ? `${n} ${n === 1 ? 'deposit' : 'deposits'} from ${list.length} ${list.length === 1 ? 'source' : 'sources'}. Same income the letter counts. Transfers between our own accounts are left out.` : ''}</p>
+// ---------------------------------------------------------------- drill-down sheets
+// Every sheet recomputes from the same summarize()/worth() the page used, so its total always equals the number tapped.
+const dayShort = (d) => `${weekdayName(d).slice(0, 3)} ${shortDate(d)}`;
+const rangeText = (from, to) => (to >= today() && from <= today() ? `${shortDate(from)} to today` : `${shortDate(from)} – ${shortDate(to)}`);
+const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+const byDateDesc = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+const XBTN = '<button type="button" class="iconbtn sheet-x" data-close aria-label="Close"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>';
+function sheetPage({ kicker, title, total, totalClass = '', note = '', body }) {
+  openSheet(`${XBTN}
+    <p class="kicker" style="margin-bottom:4px">${kicker}</p>
+    <h3>${title}</h3>
+    ${total !== undefined ? `<div class="inc-total ${totalClass}">${total}</div>` : ''}
+    ${note ? `<p class="muted" style="margin:0;font-size:14px">${note}</p>` : ''}
     ${body}
     <div class="btns"><button type="button" class="btn ghost" data-close>Done</button></div>`);
+}
+const group = (label, sub, total, rows, totalClass = '') => `<div class="inc-group"><div class="inc-head"><span class="n">${label}${sub ? `<small>${sub}</small>` : ''}</span><span class="t ${totalClass}">${total}</span></div>
+  ${rows.length ? `<ul class="inc-rows">${rows.join('')}</ul>` : ''}</div>`;
+const line = (left, right, cls = '') => `<li class="${cls}"><span class="w">${left}</span><span class="a">${right}</span></li>`;
+const emptyLine = (t) => `<p class="empty" style="margin-top:18px">${t}</p>`;
+const pend = (r) => (r.pending ? ' <span class="pend">pending</span>' : '');
+const noteOf = (r) => (r.note ? ` · “${esc(r.note)}”` : '');
+const groupBy = (rows, keyOf, labelOf, valOf) => {
+  const m = new Map();
+  for (const r of rows) { const k = keyOf(r); const g = m.get(k) || { key: k, label: labelOf(r), total: 0, rows: [] }; g.total += valOf(r); g.rows.push(r); m.set(k, g); }
+  const list = [...m.values()]; list.forEach((g) => g.rows.sort(byDateDesc)); return list;
+};
+
+function openIncomeSheet(from, to, title) {
+  const s = summarize(S.rows, from, to);
+  const list = groupBy(s.incomeRows, (r) => r.key, (r) => r.label, (r) => r.amount).sort((a, b) => b.total - a.total);
+  const n = s.incomeRows.length;
+  const body = !n ? emptyLine('Nothing came in during these days. Transfers between our own accounts and card refunds are not counted as income.') :
+    list.map((g) => {
+      const accts = [...new Set(g.rows.map((r) => (r.acct ? r.acct.display : '')))].filter(Boolean);
+      return group(esc(g.label), `${plural(g.rows.length, 'deposit')}${accts.length === 1 ? ` · into ${esc(accts[0])}` : ''}`, m2(g.total),
+        g.rows.map((r) => line(`${dayShort(r.date)}${accts.length === 1 ? '' : ` · ${esc(r.acct ? r.acct.display : '')}`}${pend(r)}${noteOf(r)}`, signed(r.amount))), g.total > 0 ? 'up' : '');
+    }).join('');
+  sheetPage({ kicker: `${esc(title)} · ${rangeText(from, to)}`, title: 'Where the money came from', total: m2(s.income), totalClass: s.income > 0 ? 'up' : '',
+    note: n ? `${plural(n, 'deposit')} from ${plural(list.length, 'source')}. Same income the letter counts. Transfers between our own accounts are left out.` : '', body });
+}
+
+// Purchases (consumer spending), grouped by category or by day.
+function openSpentSheet(from, to, title, mode = 'cat') {
+  const s = summarize(S.rows, from, to);
+  const n = s.items.length;
+  const refundTag = (r) => (r.spend < 0 ? ' <span class="faint">refund</span>' : '');
+  let body;
+  if (!n) body = emptyLine('No purchases in these days.');
+  else if (mode === 'day') {
+    body = groupBy(s.items, (r) => r.date, (r) => r.date, (r) => r.spend).sort((a, b) => (a.key < b.key ? 1 : -1)).map((g) =>
+      group(`${weekdayName(g.key)}, ${shortDate(g.key)}`, plural(g.rows.length, 'purchase'), m2(g.total),
+        g.rows.map((r) => line(`${esc(r.label)} <span class="faint">· ${CATS[r.cat].label}</span>${pend(r)}${refundTag(r)}${noteOf(r)}`, m2(r.spend))))).join('');
+  } else {
+    body = groupBy(s.items, (r) => r.cat, (r) => CATS[r.cat].label, (r) => r.spend).sort((a, b) => b.total - a.total).map((g) =>
+      group(`<span class="dot" style="background:${CATS[g.key].color}"></span> ${g.label}`, `${plural(g.rows.length, 'purchase')} · ${Math.round((g.total / (s.spend || 1)) * 100)}%`, m2(g.total),
+        g.rows.map((r) => line(`${esc(r.label)} <span class="faint">· ${dayShort(r.date)}</span>${pend(r)}${refundTag(r)}${noteOf(r)}`, m2(r.spend))))).join('');
+  }
+  sheetPage({ kicker: `${esc(title)} · ${rangeText(from, to)}`, title: mode === 'day' ? 'Every purchase, day by day' : 'Where it went',
+    total: m2(s.spend), note: n ? `${plural(n, 'purchase')}. Real purchases only, same as the letter${s.pending > 0 ? `. Includes ${m2(s.pending)} still pending` : ''}. Transfers, card payments and Bitcoin buys are left out.` : '', body });
+}
+
+function openVsSheet() {
+  const L = buildLetter(S.rows, today(), snap().coverage && snap().coverage.from);
+  const a = L.last, b = L.prev;
+  const cats = CAT_KEYS.filter((c) => Math.abs(a.byCat[c] || 0) >= 0.005 || Math.abs(b.byCat[c] || 0) >= 0.005)
+    .map((c) => [c, (a.byCat[c] || 0), (b.byCat[c] || 0)]).sort((x, y) => Math.abs(y[1] - y[2]) - Math.abs(x[1] - x[2]));
+  const diffTxt = (d) => (Math.abs(d) < 0.5 ? '<span class="muted">same</span>' : `<span class="${d > 0 ? 'down' : 'up'}">${d > 0 ? '+' : '−'}${m2(Math.abs(d))}</span>`);
+  const body = `<div class="inc-group"><ul class="inc-rows vs-rows">
+    <li class="vs-head"><span class="w">Category</span><span class="c">${shortDate(L.lastWs)} wk</span><span class="c">${shortDate(addDays(L.lastWs, -7))} wk</span><span class="a">Change</span></li>
+    ${cats.map(([c, x, y]) => `<li><span class="w"><span class="dot" style="background:${CATS[c].color}"></span> ${CATS[c].label}</span><span class="c">${m0(x)}</span><span class="c">${m0(y)}</span><span class="a">${diffTxt(x - y)}</span></li>`).join('')}
+    <li class="vs-total"><span class="w">Total</span><span class="c">${m0(a.spend)}</span><span class="c">${m0(b.spend)}</span><span class="a">${diffTxt(a.spend - b.spend)}</span></li></ul></div>`;
+  sheetPage({ kicker: `Last week vs the week before`, title: 'What changed', total: Math.abs(L.vsPrev) < 0.5 ? 'About the same' : `${m2(Math.abs(L.vsPrev))} ${L.vsPrev > 0 ? 'more' : 'less'}`,
+    totalClass: L.vsPrev > 0.5 ? 'down' : L.vsPrev < -0.5 ? 'up' : '', note: 'Biggest changes first, by category.', body });
+}
+
+function openTxSheet(id) {
+  const r = S.rows.find((x) => x.id === id); if (!r) return;
+  const kindLabel = r.kind === 'spend' ? `Spending · ${CATS[r.cat].label}` : KINDS[r.kind];
+  const others = S.rows.filter((x) => x.key === r.key && x.id !== r.id && counts(x) && x.kind === r.kind);
+  const fields = [['Where', esc(r.label)], ['When', `${weekdayName(r.date)}, ${shortDate(r.date)}`], ['Account', esc(r.acct ? r.acct.display : '—')],
+    ['Counted as', esc(kindLabel)], ...(r.pending ? [['Status', '<span class="warn">Still pending</span>']] : []), ...(r.note ? [['Note', `“${esc(r.note)}”`]] : [])];
+  const body = `<div class="inc-group"><ul class="inc-rows facts">${fields.map(([k, v]) => line(`<span class="faint">${k}</span>`, v)).join('')}</ul></div>
+    ${others.length ? group('Other times here', `${plural(others.length, 'time')} in the last six months`, m2(others.reduce((t, x) => t + (x.kind === 'spend' ? x.spend : Math.abs(x.amount)), 0)),
+      others.slice(0, 8).map((x) => line(`${dayShort(x.date)}${pend(x)}`, x.kind === 'spend' ? m2(x.spend) : signed(x.amount)))) : ''}`;
+  sheetPage({ kicker: 'Story item · last week', title: esc(r.label), total: r.kind === 'spend' ? m2(r.spend) : signed(r.amount), note: r.why === 'fix' ? 'Category set by one of our Fix rules.' : '', body });
+}
+
+function openInvestSheet(from, to, title) {
+  const s = summarize(S.rows, from, to);
+  const n = s.investRows.length;
+  const body = !n ? emptyLine('No investing in these days.') :
+    groupBy(s.investRows, (r) => r.key, (r) => r.label, (r) => -r.amount).sort((a, b) => b.total - a.total).map((g) =>
+      group(esc(g.label), plural(g.rows.length, 'buy'), m2(g.total), g.rows.map((r) => line(`${dayShort(r.date)} · from ${esc(r.acct ? r.acct.display : '')}${pend(r)}`, m2(-r.amount))))).join('');
+  sheetPage({ kicker: `${esc(title)} · ${rangeText(from, to)}`, title: 'Money we invested', total: m2(s.investing),
+    note: n ? 'Bitcoin buys through River. Counted once, from the bank side. Not spending.' : '', body });
+}
+
+function openMovesSheet(from, to, title) {
+  const s = summarize(S.rows, from, to);
+  const rowsOf = (list) => list.slice().sort(byDateDesc).map((r) => line(`${esc(r.label)} <span class="faint">· ${dayShort(r.date)} · ${esc(r.acct ? r.acct.display : '')}</span>${pend(r)}`, m2(-r.amount)));
+  const body = (s.transferRows.length ? group('Moved between our accounts', `${plural(s.transferRows.length, 'move')} · counted once, from the sending side`, m2(s.transfers), rowsOf(s.transferRows)) : '') +
+    (s.cardRows.length ? group('Paid to cards', plural(s.cardRows.length, 'payment'), m2(s.cardPayments), rowsOf(s.cardRows)) : '') ||
+    emptyLine('No transfers or card payments in these days.');
+  sheetPage({ kicker: `${esc(title)} · ${rangeText(from, to)}`, title: 'Money that only moved', total: m2(s.transfers + s.cardPayments),
+    note: 'None of this is new spending: it moved between our own accounts or paid off purchases already counted.', body });
+}
+
+function ownParts() {
+  const accts = (snap() && snap().accounts) || [];
+  const items = S.data.items || [];
+  const acctRows = (cls) => accts.filter((a) => a.class === cls).sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance))
+    .map((a) => line(`${esc(a.display)}${a.nickname ? ` <span class="faint">· ${esc(a.nickname)}</span>` : ''}`, m2(Math.abs(Number(a.balance) || 0))));
+  return { accts, items, acctRows };
+}
+function openOwnSheet(slice = '') {
+  const w = worth(snap(), S.data.items || []);
+  const { items, acctRows } = ownParts();
+  const holdings = (snap() && snap().holdings) || [];
+  const stuff = items.filter((i) => i.side === 'own');
+  const g = {
+    cash: () => group('Cash in the bank', 'Checking and savings', m2(w.cash), acctRows('cash')),
+    invest: () => group('Investments', 'Account balances', m2(w.invest), [...acctRows('investment'),
+      ...holdings.map((h) => line(`<span class="faint">Inside it: ${esc(h.name)} ${h.quantity.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${esc(h.ticker)} at ${m0(h.price)}</span>`, `<span class="faint">${m2(h.value)}</span>`))]),
+    stuff: () => group('Things we added', stuff.length ? 'Edit these on Worth' : '', m2(w.stuff), stuff.length ? stuff.map((i) => line(`${esc(i.name)} <span class="faint">· ${esc(i.shape)}</span>`, m2(Number(i.amount)))) : [line('<span class="muted">Nothing added yet. Add a car or house on Worth.</span>', '')]),
+  };
+  const titles = { cash: 'Cash in the bank', invest: 'Investments', stuff: 'Things we added' };
+  const body = slice ? g[slice]() : g.cash() + g.invest() + g.stuff();
+  const total = slice ? { cash: w.cash, invest: w.invest, stuff: w.stuff }[slice] : w.own;
+  sheetPage({ kicker: `What we own · as of ${fmtStamp(S.data.snapshot ? S.data.snapshot.pulled_at : S.data.server_time, false)}`, title: slice ? titles[slice] : 'Everything we own', total: m2(total),
+    note: slice === 'invest' || !slice ? 'Bitcoin is counted once, inside the River account balance.' : '', body });
+}
+function openOweSheet() {
+  const w = worth(snap(), S.data.items || []);
+  const { accts, items, acctRows } = ownParts();
+  const owed = items.filter((i) => i.side === 'owe');
+  const cards = accts.filter((a) => a.class === 'liability');
+  const body = (cards.length ? group('Cards and loans', 'Balances from the banks', m2(w.cards), acctRows('liability')) : '') +
+    group('Things we owe', owed.length ? 'Added by us on Worth' : '', m2(w.owedItems), owed.length ? owed.map((i) => line(esc(i.name), m2(Number(i.amount)))) : [line('<span class="muted">None added. A car loan or mortgage can go on Worth.</span>', '')]);
+  sheetPage({ kicker: `What we owe · as of ${fmtStamp(S.data.snapshot ? S.data.snapshot.pulled_at : S.data.server_time, false)}`, title: w.owe > 0.005 ? 'Everything we owe' : 'We owe nothing right now',
+    total: m2(w.owe), totalClass: w.owe > 0.005 ? 'down' : '',
+    note: w.owe > 0.005 ? '' : `${cards.length ? `Every linked card shows a $0 balance` : 'No cards or loans are linked'}, and we haven't added any loans.`, body });
+}
+
+// This week, day by day, against the target.
+function openTargetByDay() {
+  const target = targetOf(); const ws = weekStart(today()); const t = today();
+  const s = summarize(S.rows, ws, t);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+  const per = target ? target / 7 : 0;
+  let run = 0;
+  const body = days.map((d) => {
+    if (d > t) return `<div class="inc-group day-future"><div class="inc-head"><span class="n">${weekdayName(d)}, ${shortDate(d)}<small>Still ahead</small></span><span class="t faint">–</span></div></div>`;
+    const rows = s.items.filter((r) => r.date === d).sort((a, b) => b.spend - a.spend);
+    const tot = rows.reduce((a, r) => a + r.spend, 0); run += tot;
+    return group(`${weekdayName(d)}, ${shortDate(d)}${d === t ? ' <span class="faint">· today</span>' : ''}`, `${rows.length ? plural(rows.length, 'purchase') : 'No purchases'} · ${m0(run)} so far${target ? ` of ${m0(target)}` : ''}`, m2(tot),
+      rows.map((r) => line(`${esc(r.label)} <span class="faint">· ${CATS[r.cat].label}</span>${pend(r)}${r.spend < 0 ? ' <span class="faint">refund</span>' : ''}`, m2(r.spend))), target && tot > per * 1.5 ? 'warn' : '');
+  }).join('');
+  const v = vsTarget(s.spend, target);
+  sheetPage({ kicker: `This week · ${rangeText(ws, t)}`, title: target ? `${m0(s.spend)} of ${m0(target)}` : 'This week, day by day',
+    total: v ? (v.state === 'over' ? `${m0(v.diff)} over` : v.state === 'at' ? 'Right on target' : `${m0(v.diff)} left`) : m2(s.spend), totalClass: v && v.state === 'over' ? 'down' : '',
+    note: target ? `An even week would be about ${m0(per)} a day. ${daysLeftInWeek() > 1 && v.state === 'under' ? `About ${m0(v.diff / daysLeftInWeek())} a day keeps us on target.` : ''}` : '', body });
+}
+
+function openSheetFor(spec) {
+  const [kind, ...a] = spec.split('|');
+  if (kind === 'income') return openIncomeSheet(a[0], a[1], a[2]);
+  if (!snap() && kind !== 'own' && kind !== 'owe') return;
+  if (kind === 'spent') return openSpentSheet(a[0], a[1], a[2], a[3] || 'cat');
+  if (kind === 'invest') return openInvestSheet(a[0], a[1], a[2]);
+  if (kind === 'moves') return openMovesSheet(a[0], a[1], a[2]);
+  if (kind === 'vs') return openVsSheet();
+  if (kind === 'tx') return openTxSheet(a[0]);
+  if (kind === 'own') return openOwnSheet(a[0] || '');
+  if (kind === 'owe') return openOweSheet();
+  if (kind === 'target') return openTargetByDay();
 }
 
 // ---------------------------------------------------------------- locked
@@ -605,7 +780,10 @@ $('#sheet-root').addEventListener('click', (e) => {
   if (e.target.closest('[data-close]')) return closeSheet();
   if (sheetHandler) sheetHandler(e);
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') return closeSheet();
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[role=button][data-sheet]')) { e.preventDefault(); openSheetFor(e.target.dataset.sheet); }
+});
 
 // ---------------------------------------------------------------- events
 document.addEventListener('click', (e) => {
@@ -614,7 +792,7 @@ document.addEventListener('click', (e) => {
   const per = t.closest('[data-period]'); if (per) { S.spendPeriod = per.dataset.period; S.openCat = null; render(); return; }
   const cat = t.closest('[data-cat]'); if (cat) { S.openCat = S.openCat === cat.dataset.cat ? null : cat.dataset.cat; render(); return; }
   if (t.closest('[data-target-edit]')) { openTargetSheet(); return; }
-  const inc = t.closest('[data-income]'); if (inc) { const [f, to, title] = inc.dataset.income.split('|'); openIncomeSheet(f, to, title); return; }
+  const sh = t.closest('[data-sheet]'); if (sh) { openSheetFor(sh.dataset.sheet); return; }
   const fix = t.closest('[data-fix]'); if (fix) { openFixSheet(fix.dataset.fix, fix.dataset.label, fix.dataset.cur); return; }
   const unfix = t.closest('[data-unfix]'); if (unfix) {
     const key = unfix.dataset.unfix; const f = S.data.fixes.find((x) => x.merchant_key === key);

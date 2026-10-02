@@ -81,7 +81,7 @@ export const counts = (r) => !r.dup && !r.mirror;
 
 // ---------- summaries ----------
 export function summarize(rows, from, to) {
-  const s = { from, to, spend: 0, pending: 0, income: 0, investing: 0, transfers: 0, cardPayments: 0, byCat: {}, merchants: {}, items: [], incomeRows: [] };
+  const s = { from, to, spend: 0, pending: 0, income: 0, investing: 0, transfers: 0, cardPayments: 0, byCat: {}, merchants: {}, items: [], incomeRows: [], investRows: [], transferRows: [], cardRows: [] };
   for (const r of rows) {
     if (r.date < from || r.date > to || !counts(r)) continue;
     if (r.kind === 'spend') {
@@ -93,9 +93,9 @@ export function summarize(rows, from, to) {
       e.total += r.spend; e.count += 1; e.rows.push(r);
       s.items.push(r);
     } else if (r.kind === 'income') { s.income += r.amount; s.incomeRows.push(r); }
-    else if (r.kind === 'investing') s.investing += -r.amount;
-    else if (r.kind === 'transfer' && r.amount < 0) s.transfers += -r.amount;
-    else if (r.kind === 'card_payment' && r.src !== 'card' && r.amount < 0) s.cardPayments += -r.amount;
+    else if (r.kind === 'investing') { s.investing += -r.amount; s.investRows.push(r); }
+    else if (r.kind === 'transfer' && r.amount < 0) { s.transfers += -r.amount; s.transferRows.push(r); }
+    else if (r.kind === 'card_payment' && r.src !== 'card' && r.amount < 0) { s.cardPayments += -r.amount; s.cardRows.push(r); }
   }
   s.cats = Object.entries(s.byCat).filter(([, v]) => Math.abs(v) >= 0.005).sort((a, b) => b[1] - a[1]);
   return s;
