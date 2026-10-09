@@ -113,7 +113,7 @@ const money0 = (n) => '$' + Math.round(Math.abs(n)).toLocaleString('en-US');
 const money2 = (n) => '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // The Monday letter for the most recent full week.
-export function buildLetter(rows, today, coverageFrom) {
+export function buildLetter(rows, today, coverageFrom, { invStory = 'Bitcoin' } = {}) {
   const thisWs = weekStart(today);
   const lastWs = addDays(thisWs, -7);
   const last = summarize(rows, lastWs, addDays(lastWs, 6));
@@ -159,7 +159,7 @@ export function buildLetter(rows, today, coverageFrom) {
   if (giving > last.spend * 0.3) story.push(`${money0(giving)} of that was giving.`);
   if (storyPick) story.push(`The one worth talking about: ${money2(storyPick.spend)} at ${storyPick.label} on ${weekdayName(storyPick.date)}.`);
   story.push(last.income > 0.5 ? `${money0(last.income)} came in.` : 'No paychecks landed.');
-  if (last.investing > 0) story.push(`${money0(last.investing)} went into Bitcoin.`);
+  if (last.investing > 0) story.push(`${money0(last.investing)} went into ${invStory}.`);
 
   return { lastWs, last, prev, usual, usualWeeks: usualWeeks.length, verdict, normal, story, storyPick,
     vsPrev: last.spend - prev.spend };

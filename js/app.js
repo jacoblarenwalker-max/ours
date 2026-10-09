@@ -1,10 +1,11 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=14';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=15';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=14';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=14';
-import * as Auth from './auth.js?v=14';
+} from './logic.js?v=15';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=15';
+import * as Auth from './auth.js?v=15';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=15';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -18,7 +19,18 @@ const S = {
   linkKey: null, session: null, sessionExp: 0, via: 'passkey', backup: null, newCodes: null, backupNote: false, lockMode: 'unlock', lockMsg: '', lockBusy: false, devices: null, hiddenAt: 0,
   page: 'week', data: null, rows: [], busy: false, fromCache: false, loadError: null,
   spendPeriod: 'this', openCat: null, actFilter: 'all', actLimit: 80, editing: null, draftShape: 'car',
+  demo: false, demoSeed: 1, wantTour: false, tourOn: null, tourCheck: '',
 };
+// Wording that names our own investing account. The tour swaps in its made-up equivalents.
+const REAL_WORDS = {
+  invInto: 'into Bitcoin (River). Not spending.', invStory: 'Bitcoin', invBuys: 'Bitcoin buys',
+  invBuysMid: 'Bitcoin buys',
+  invHow: 'Bitcoin buys through River. Counted once, from the bank side. Not spending.',
+  invInside: 'Bitcoin is counted once, inside the River account balance.', holdNote: 'Counted once, as part of the River Bitcoin account balance.',
+  incomeNote: 'including family Venmo, which may be paybacks',
+};
+const W = () => (S.demo ? DEMO_WORDS : REAL_WORDS);
+const isOpen = () => !!S.session || S.demo;
 
 // ---------------------------------------------------------------- utils
 const $ = (s, el = document) => el.querySelector(s);
@@ -67,16 +79,18 @@ const SHAPES = { car: 'Car', home: 'Home', bike: 'Bike', other: 'Other', loan: '
 // ---------------------------------------------------------------- key + routing
 function readHash() {
   const h = new URLSearchParams(location.hash.replace(/^#/, ''));
-  return { k: h.get('k'), p: h.get('p') };
+  return { k: h.get('k'), p: h.get('p'), tour: h.has('tour') };
 }
 function writeHash(replace = false) {
   const h = new URLSearchParams();
   if (S.page !== 'week') h.set('p', S.page);
-  const url = `${location.pathname}${location.search}#${h.toString()}`;
+  const tour = S.demo || S.wantTour;   // the tour link is just #tour: it never carries a key
+  const url = `${location.pathname}${location.search}#${tour ? 'tour' : ''}${tour && h.toString() ? '&' : ''}${h.toString()}`;
   if (replace) history.replaceState(null, '', url); else history.pushState(null, '', url);
 }
 function initKey() {
-  const { k, p } = readHash();
+  const { k, p, tour } = readHash();
+  S.wantTour = tour && !k;
   // The link key only sets up Face ID. Hold it until setup succeeds, and take it out of the address bar.
   if (k) { S.linkKey = k; try { localStorage.setItem(KEYSTORE, k); } catch {} }
   else { try { S.linkKey = localStorage.getItem(KEYSTORE); } catch {} }
@@ -118,7 +132,7 @@ const AUTO = { armed: false, ctrl: null, lastEnd: 0, hiddenAt: 0, hiddenDuringPr
 const AUTO_QUIET_MS = 2000;
 function armAuto() { AUTO.armed = true; }
 function maybeAutoUnlock() {
-  if (!AUTO.armed || S.session || S.lockMode !== 'unlock' || !enrolledHere()) return;
+  if (!AUTO.armed || S.session || S.demo || S.wantTour || S.lockMode !== 'unlock' || !enrolledHere()) return;
   if (AUTO.ctrl || S.lockBusy || document.visibilityState !== 'visible') return;
   if (Date.now() - AUTO.lastEnd < AUTO_QUIET_MS) return;
   AUTO.armed = false; // one automatic try per lock event
@@ -223,6 +237,8 @@ async function doEnroll(form) {
 
 // ---------------------------------------------------------------- api
 async function rpc(fn, body, timeoutMs = 15000) {
+  // In the tour every write is answered here, in memory. Nothing is sent anywhere.
+  if (S.demo) return demoWrite(S.data, fn, body);
   if (!sessionLive()) { const err = new Error('locked'); if (S.session) lockNow('Signed out after 12 hours. Unlock again to keep going.', { revoke: false }); throw err; }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -251,6 +267,7 @@ function saveCache() {}
 
 let pollTimer = null;
 async function load({ manual = false } = {}) {
+  if (S.demo) { if (manual) toast('This is the tour. Every number is made up, so there is nothing to pull.'); return; }
   if (S.busy) return;
   S.busy = true; S.loadError = null; renderStatus();
   const before = S.data && S.data.snapshot ? S.data.snapshot.id : null;
@@ -298,7 +315,8 @@ function renderStatus() {
   el.classList.remove('old', 'busy');
   if (S.busy) { el.textContent = 'Updating…'; el.classList.add('busy'); return; }
   const snap = S.data && S.data.snapshot;
-  if (!S.session) { el.textContent = ''; return; }
+  if (!isOpen()) { el.textContent = ''; return; }
+  if (S.demo) { el.textContent = ''; return; }   // the ribbon says it
   if (!snap) { el.textContent = 'No bank pull yet'; return; }
   const shortD = new Date(snap.pulled_at).toLocaleDateString('en-US', { timeZone: TZ, month: 'short', day: 'numeric' });
   el.innerHTML = `<span class="s-long">Updated ${fmtStamp(snap.pulled_at)}</span><span class="s-short">Updated ${shortD}</span>`;
@@ -306,10 +324,16 @@ function renderStatus() {
   if (hoursOld(snap.pulled_at) > STALE_AFTER_HOURS || S.loadError) el.classList.add('old');
 }
 function render() {
-  document.body.classList.toggle('is-locked', !S.session);
-  renderNav(); renderStatus();
+  const open = isOpen();
+  document.body.classList.toggle('is-locked', !open);
+  document.body.classList.toggle('is-demo', S.demo);
+  renderRibbon(); renderNav(); renderStatus();
   const main = $('#main');
-  if (!S.session) { main.innerHTML = lockedView(); return; }
+  if (!open) { main.innerHTML = lockedView(); return; }
+  if (S.demo) {
+    const view = { week: weekView, spend: spendView, worth: worthView, activity: activityView, history: historyView, plan: planView }[S.page];
+    main.innerHTML = `<div class="page">${view()}</div>`; return;
+  }
   if (!S.data && !S.newCodes) { main.innerHTML = `<div class="page"><p class="empty">${S.busy ? 'Opening our notebook…' : "Couldn't reach our notebook. Check the connection and tap the refresh button."}</p></div>`; return; }
   if (S.newCodes) { main.innerHTML = codesView(); return; }
   const view = { week: weekView, spend: spendView, worth: worthView, activity: activityView, history: historyView, plan: planView }[S.page];
@@ -395,7 +419,7 @@ function weekView() {
   const tw = summarize(S.rows, ws, today());
   let html = staleBanner();
   if (!snap()) return html + weekHero(tw, null) + '<section class="section"><p class="empty">The weekly letter shows up after the first bank pull.</p></section>';
-  const L = buildLetter(S.rows, today(), snap().coverage && snap().coverage.from);
+  const L = buildLetter(S.rows, today(), snap().coverage && snap().coverage.from, { invStory: W().invStory });
   const last = L.last;
   const top = last.cats.slice(0, 3).map(([c, v]) => `${CATS[c].label} ${m0(v)}`).join(' · ') || 'Nothing yet';
   const verdictClass = { more: 'down', less: 'up', same: '', none: 'muted' }[L.verdict];
@@ -419,7 +443,7 @@ function weekView() {
         ${li('vs', 'vs last week', `${Math.abs(L.vsPrev) < 0.5 ? 'About the same' : `${m2(Math.abs(L.vsPrev))} ${L.vsPrev > 0 ? 'more' : 'less'}`} <small>than the week before (${m2(L.prev.spend)})</small>`, L.vsPrev > 0.5 ? 'down' : L.vsPrev < -0.5 ? 'up' : '')}
         ${li(last.cats.length ? `spent|${lw}|cat` : '', 'Top categories', esc(top))}
         ${li(pick ? `tx|${pick.id}` : '', 'Story item', pick ? `${esc(pick.label)} · ${m2(pick.spend)} <small>${weekdayName(pick.date)}${pick.note ? ` · “${esc(pick.note)}”` : ''}</small>` : 'Nothing stood out.')}
-        ${li(last.investRows.length ? `invest|${lw}` : '', 'Investing', last.investing > 0 ? `${m2(last.investing)} <small>into Bitcoin (River). Not spending.</small>` : 'Nothing this week.')}
+        ${li(last.investRows.length ? `invest|${lw}` : '', 'Investing', last.investing > 0 ? `${m2(last.investing)} <small>${W().invInto}</small>` : 'Nothing this week.')}
         ${li(last.incomeRows.length ? `income|${lw}` : '', 'Income received', `${m2(last.income)}${last.incomeRows.length ? '' : ' <small>Nothing came in.</small>'}`, last.income > 0 ? 'up' : '')}
         ${li(last.transferRows.length || last.cardRows.length ? `moves|${lw}` : '', 'Transfers and card payments', `${m2(last.transfers)} <small>moved between our accounts</small> · ${m2(last.cardPayments)} <small>paid to cards. Not new spending.</small>`)}
       </ol>
@@ -476,7 +500,7 @@ function targetBlock(tw, L) {
 }
 function openTargetSheet() {
   const target = targetOf();
-  const L = buildLetter(S.rows, today(), snap() && snap().coverage && snap().coverage.from);
+  const L = buildLetter(S.rows, today(), snap() && snap().coverage && snap().coverage.from, { invStory: W().invStory });
   const s = suggestTarget(L.usual);
   openSheet(`<h3>Weekly spending target</h3>
     <p>One number for both of us. It counts real purchases only, the same spending as the letter.${L.usual ? ` Our usual week (last 4 weeks) is about ${m0(L.usual)}.` : ''}</p>
@@ -629,7 +653,7 @@ function worthView() {
   <section class="section">
     <p class="kicker">Holdings</p>
     <div class="card"><ul class="rows">${holdings.map((h) => `<li><span class="name">${esc(h.name)} <span class="faint">${h.quantity.toLocaleString('en-US', { maximumFractionDigits: 6 })} ${esc(h.ticker)} at ${m0(h.price)}</span></span><span class="amt">${m2(h.value)}</span></li>`).join('') || '<li class="muted">No holdings in the linked accounts.</li>'}</ul>
-    ${holdings.length ? '<p class="faint" style="font-size:13px;margin:10px 0 0">Counted once, as part of the River Bitcoin account balance.</p>' : ''}</div>
+    ${holdings.length ? `<p class="faint" style="font-size:13px;margin:10px 0 0">${W().holdNote}</p>` : ''}</div>
   </section>
   <section class="section">
     <p class="kicker">Every linked account</p>
@@ -640,7 +664,7 @@ function worthView() {
     }).join('') || '<p class="empty">No accounts linked yet.</p>'}</div>
     ${snap() ? `<p class="faint" style="font-size:13px;margin:10px 2px 0">Balances as of ${fmtStamp(S.data.snapshot.pulled_at)}.</p>` : ''}
   </section>`;
-  return html + devicesBlock();
+  return html + tourCard() + devicesBlock();
 }
 async function submitItem(form) {
   const name = form.name.value.trim();
@@ -745,7 +769,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=14', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=15', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -781,7 +805,7 @@ function planView() {
       <span class="mo-bars"><span class="b in" style="width:${(m.income / max * 100).toFixed(1)}%"></span><span class="b out" style="width:${(out / max * 100).toFixed(1)}%"></span></span>
       <span class="mo-v"><span class="up">${m0(m.income)}</span><span>${m0(out)}</span>${m.oneOff ? `<small class="warn">+${m0(m.oneOff)} one-time</small>` : ''}</span>${CHEV}</li>`; }).join('')}
   </ul><p class="mo-key"><span><i class="k in"></i>In</span><span><i class="k out"></i>Out: purchases${A.unseen > 0 ? ` + ${esc(A.unseenName)} payments` : ''}</span></p></div>
-  <p class="note">${A.oneOffs.length ? `Left out of the usual month: ${A.oneOffs.map((r) => `${esc(r.label)} ${m0(r.spend)} (${shortDate(r.date)})`).join(', ')}. ` : ''}Income counts every deposit tagged as income, including family Venmo, which may be paybacks. ${A.invested > 0 ? `Bitcoin buys (${m0(A.invested)} a month) count as saving, not spending.` : ''}</p></section>`;
+  <p class="note">${A.oneOffs.length ? `Left out of the usual month: ${A.oneOffs.map((r) => `${esc(r.label)} ${m0(r.spend)} (${shortDate(r.date)})`).join(', ')}. ` : ''}Income counts every deposit tagged as income, ${W().incomeNote}. ${A.invested > 0 ? `${W().invBuys} (${m0(A.invested)} a month) count as saving, not spending.` : ''}</p></section>`;
 
   // next steps
   const MAIN = 6;
@@ -950,11 +974,11 @@ function openSpentSheet(from, to, title, mode = 'cat') {
         g.rows.map((r) => line(`${esc(r.label)} <span class="faint">· ${dayShort(r.date)}</span>${pend(r)}${refundTag(r)}${noteOf(r)}`, m2(r.spend))))).join('');
   }
   sheetPage({ kicker: `${esc(title)} · ${rangeText(from, to)}`, title: mode === 'day' ? 'Every purchase, day by day' : 'Where it went',
-    total: m2(s.spend), note: n ? `${countTxt(s.items).replace(' · ', ' and ')}. Real purchases only, same as the letter${s.pending > 0 ? `. Includes ${m2(s.pending)} still pending` : ''}. Transfers, card payments and Bitcoin buys are left out.` : '', body });
+    total: m2(s.spend), note: n ? `${countTxt(s.items).replace(' · ', ' and ')}. Real purchases only, same as the letter${s.pending > 0 ? `. Includes ${m2(s.pending)} still pending` : ''}. Transfers, card payments and ${W().invBuysMid} are left out.` : '', body });
 }
 
 function openVsSheet() {
-  const L = buildLetter(S.rows, today(), snap().coverage && snap().coverage.from);
+  const L = buildLetter(S.rows, today(), snap().coverage && snap().coverage.from, { invStory: W().invStory });
   const a = L.last, b = L.prev;
   const cats = CAT_KEYS.filter((c) => Math.abs(a.byCat[c] || 0) >= 0.005 || Math.abs(b.byCat[c] || 0) >= 0.005)
     .map((c) => [c, (a.byCat[c] || 0), (b.byCat[c] || 0)]).sort((x, y) => Math.abs(y[1] - y[2]) - Math.abs(x[1] - x[2]));
@@ -986,7 +1010,7 @@ function openInvestSheet(from, to, title) {
     groupBy(s.investRows, (r) => r.key, (r) => r.label, (r) => -r.amount).sort((a, b) => b.total - a.total).map((g) =>
       group(esc(g.label), plural(g.rows.length, 'buy'), m2(g.total), g.rows.map((r) => line(`${dayShort(r.date)} · from ${esc(r.acct ? r.acct.display : '')}${pend(r)}`, m2(-r.amount))))).join('');
   sheetPage({ kicker: `${esc(title)} · ${rangeText(from, to)}`, title: 'Money we invested', total: m2(s.investing),
-    note: n ? 'Bitcoin buys through River. Counted once, from the bank side. Not spending.' : '', body });
+    note: n ? W().invHow : '', body });
 }
 
 function openMovesSheet(from, to, title) {
@@ -1021,7 +1045,7 @@ function openOwnSheet(slice = '') {
   const body = slice ? g[slice]() : g.cash() + g.invest() + g.stuff();
   const total = slice ? { cash: w.cash, invest: w.invest, stuff: w.stuff }[slice] : w.own;
   sheetPage({ kicker: `What we own · as of ${fmtStamp(S.data.snapshot ? S.data.snapshot.pulled_at : S.data.server_time, false)}`, title: slice ? titles[slice] : 'Everything we own', total: m2(total),
-    note: slice === 'invest' || !slice ? 'Bitcoin is counted once, inside the River account balance.' : '', body });
+    note: slice === 'invest' || !slice ? W().invInside : '', body });
 }
 function openOweSheet() {
   const w = worth(snap(), S.data.items || []);
@@ -1082,6 +1106,18 @@ function lockedView() {
   const busy = S.lockBusy;
   const msg = S.lockMsg ? `<p class="lock-msg" role="alert">${esc(S.lockMsg)}</p>` : '';
   const head = `<img class="mono" src="icons/icon-192.png?v=3" alt="">`;
+  const tourLinkP = `<p class="lock-tour" data-tour-link ${S.tourOn ? '' : 'hidden'}><button type="button" class="linkish" data-tour>Take a tour</button> <span class="faint">with made-up numbers</span></p>`;
+  if (S.wantTour) {
+    const off = S.tourOn === false, err = !off && S.tourCheck === 'error';
+    return `<div class="locked page" data-lock="tour">
+    ${head}
+    <h2>${off ? 'Tour is off' : err ? 'Couldn’t start the tour' : 'Opening the tour…'}</h2>
+    <p>${off ? 'Ours is a private money notebook for two. The tour with made-up numbers is turned off right now. Check back later.'
+      : err ? 'Ours couldn’t check whether the tour is on. Check the connection and try again.' : 'A walk through Ours with made-up numbers.'}</p>
+    ${err ? '<button type="button" class="btn lock-btn" data-tour-retry>Try again</button>' : ''}
+    ${off || err ? '<p class="lock-alt"><button type="button" class="linkish" data-tour-cancel>This is ours? Go to the lock screen</button></p>' : ''}
+  </div>`;
+  }
   if (S.lockMode === 'unlock') return `<div class="locked page" data-lock="unlock">
     ${head}
     <h2>Ours is locked.</h2>
@@ -1091,6 +1127,7 @@ function lockedView() {
     ${msg}
     <p class="lock-alt"><button type="button" class="linkish" data-lock-mode="backup">Face ID not working? Use a backup code</button></p>
     <p class="lock-alt lock-alt2"><button type="button" class="linkish" data-lock-mode="setup">New phone or computer? Set up Face ID</button></p>
+    ${tourLinkP}
   </div>`;
   if (S.lockMode === 'backup') return `<div class="locked page" data-lock="backup">
     ${head}
@@ -1115,6 +1152,7 @@ function lockedView() {
     </form>
     ${msg}
     <p class="lock-alt"><button type="button" class="linkish" data-lock-mode="unlock">Already set up? Unlock instead</button></p>
+    ${tourLinkP}
   </div>`;
 }
 
@@ -1174,6 +1212,13 @@ function confirmNewCodes() {
 // ---------------------------------------------------------------- devices
 const shortDay = (iso) => new Date(iso).toLocaleDateString('en-US', { timeZone: TZ, month: 'short', day: 'numeric', year: new Date(iso).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
 function devicesBlock() {
+  if (S.demo) return `<section class="section" id="devices"><p class="kicker">Devices with Face ID</p>
+    <div class="card"><ul class="rows dev-rows">
+      <li class="dev"><span class="name"><span>Maya’s iPhone <span class="pill">This device</span></span><span class="faint dev-meta">Example · last unlocked this morning</span></span></li>
+      <li class="dev"><span class="name"><span>Theo’s laptop</span><span class="faint dev-meta">Example · synced passkey</span></span></li>
+    </ul>
+    <p class="faint" style="font-size:13px;margin:12px 0 0">In the real Ours, only the devices listed here can open it, with Face ID, Touch ID or Windows Hello, and 8 one-time backup codes cover a lost phone. In the tour this is only an example.</p></div>
+  </section>`;
   if (!S.session) return '';
   if (S.testSession) return '<section class="section" id="devices"><p class="kicker">Devices with Face ID</p><div class="card"><p class="muted">Box test session: devices are not shown.</p></div></section>';
   if (!S.devices) loadDevices();
@@ -1240,6 +1285,86 @@ async function openInvite() {
   }
 }
 
+// ---------------------------------------------------------------- demo tour
+// A walk through every page with a made-up household (js/demo.js). It runs the same views and drill-downs, but
+// S.data comes from the generator, writes are answered in memory (see rpc), and it never asks Supabase for data.
+// The only network call is the public yes/no switch: ours_demo_enabled() returns a single boolean.
+async function checkTour() {
+  S.tourCheck = 'checking';
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 10000);
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/ours_demo_enabled`, {
+      method: 'POST', signal: ctrl.signal, cache: 'no-store', headers: { apikey: SUPABASE_PUBLISHABLE_KEY, 'Content-Type': 'application/json' }, body: '{}',
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    S.tourOn = (await r.json()) === true; S.tourCheck = '';
+  } catch { S.tourCheck = 'error'; } finally { clearTimeout(timer); }
+  if (S.wantTour && !S.session && !S.demo) { if (S.tourOn) startTour(); else render(); return; }
+  // On the lock screen just show or hide the link, so nothing being typed is disturbed.
+  document.querySelectorAll('[data-tour-link]').forEach((el) => { el.hidden = !S.tourOn; });
+}
+function startTour() {
+  if (S.session) return;
+  if (AUTO.ctrl) { const c = AUTO.ctrl; AUTO.ctrl = null; AUTO.lastEnd = Date.now(); c.abort(); }
+  AUTO.armed = false;
+  Object.assign(S, { demo: true, wantTour: false, lockMsg: '', lockHint: '', lockBusy: false, spendPeriod: 'this', openCat: null, actFilter: 'all', actLimit: 80, editing: null, draftShape: 'car' });
+  planMemo = { rows: null, items: null, facts: null, out: null };
+  setData(makeDemo(today(), S.demoSeed));
+  if (!S.facts) loadFacts();
+  writeHash(true); render(); window.scrollTo({ top: 0 });
+}
+function exitTour() {
+  Object.assign(S, { demo: false, wantTour: false, data: null, rows: [], editing: null, page: 'week', lockMode: S.linkKey && !enrolledHere() ? 'setup' : 'unlock', lockMsg: '', lockHint: '' });
+  planMemo = { rows: null, items: null, facts: null, out: null };
+  closeSheet(); writeHash(true); render(); window.scrollTo({ top: 0 });
+  checkTour();
+}
+function shuffleTour() {
+  S.demoSeed = 2 + Math.floor(Math.random() * 9000);
+  planMemo = { rows: null, items: null, facts: null, out: null }; S.editing = null; closeSheet();
+  setData(makeDemo(today(), S.demoSeed)); render();
+  toast('New made-up numbers. Anything changed in the tour was reset.');
+}
+function renderRibbon() {
+  const rb = $('#demo-ribbon'); if (!rb) return;
+  rb.hidden = !S.demo;
+  rb.innerHTML = S.demo ? `<div class="demo-inner"><span class="demo-txt"><b>Demo tour:</b> made-up numbers</span>
+    <span class="demo-btns"><button type="button" class="linkish" data-tour-shuffle>Shuffle</button><button type="button" class="btn small" data-tour-exit>Exit tour</button></span></div>` : '';
+}
+const tourLink = () => new URL('tour/', location.href.split('#')[0]).href;
+function tourIsOn() { const v = S.data && S.data.settings ? S.data.settings.demo_enabled : undefined; return v === undefined || v === null ? true : v === true; }
+function tourCard() {
+  if (S.demo || !S.session) return '';
+  const on = tourIsOn();
+  return `<section class="section" id="tour-card"><p class="kicker">Tour for friends</p>
+    <div class="card tour-card">
+      <div class="tour-row"><span class="name">${on ? 'The tour is on' : 'The tour is off'}<span class="faint dev-meta">${on ? 'The lock screen shows “Take a tour”, and the link below opens it.' : 'No tour link on the lock screen, and the link below says the tour is off.'}</span></span>
+        <button type="button" class="switch" role="switch" aria-checked="${on}" aria-label="Tour for friends" data-tour-toggle><span></span></button></div>
+      <p class="muted" style="font-size:14px;margin:12px 0 0">A walk through every page with a made-up couple and made-up numbers. It can’t see any of ours: our numbers still open only with Face ID.</p>
+      <div class="tour-link-row"><code>${esc(tourLink())}</code></div>
+      <div class="btns" style="margin-top:12px"><button type="button" class="btn ghost small" data-tour-copy>Copy link</button><a class="btn ghost small" href="${esc(tourLink())}" target="_blank" rel="noopener">Preview</a></div>
+    </div>
+  </section>`;
+}
+async function setTour(on) {
+  const prev = S.data.settings ? { ...S.data.settings } : {};
+  S.data.settings = { ...prev, demo_enabled: on }; render();
+  try {
+    await rpc('ours_setting_set', { p_name: 'demo_enabled', p_value: on });
+    S.tourOn = on;
+    toast(on ? 'Tour is on. Friends can open it from the lock screen or the link.' : 'Tour is off. The lock screen link is gone and the tour link says it’s off.');
+  } catch (e) {
+    if (!S.session) return;
+    S.data.settings = prev; render(); toast('Couldn’t change the tour. Nothing changed. Try again.');
+  }
+}
+async function copyText(text, okMsg) {
+  try { await navigator.clipboard.writeText(text); toast(okMsg); return; } catch {}
+  const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch {} ta.remove();
+  toast(ok ? okMsg : `Couldn’t copy here. The link is ${text}`, 7000);
+}
+
 // ---------------------------------------------------------------- sheet
 let sheetHandler = null;
 function openSheet(html, onClick) {
@@ -1260,6 +1385,13 @@ document.addEventListener('keydown', (e) => {
 // ---------------------------------------------------------------- events
 document.addEventListener('click', (e) => {
   const t = e.target;
+  if (t.closest('[data-tour]')) { e.preventDefault(); if (S.tourOn && !S.session) startTour(); return; }
+  if (t.closest('[data-tour-exit]')) { exitTour(); return; }
+  if (t.closest('[data-tour-shuffle]')) { shuffleTour(); return; }
+  if (t.closest('[data-tour-retry]')) { S.tourCheck = 'checking'; render(); checkTour(); return; }
+  if (t.closest('[data-tour-cancel]')) { S.wantTour = false; writeHash(true); render(); return; }
+  if (t.closest('[data-tour-toggle]')) { if (S.session && !S.demo) setTour(!tourIsOn()); return; }
+  if (t.closest('[data-tour-copy]')) { copyText(tourLink(), 'Copied. Send it to anyone you want to show.'); return; }
   if (t.closest('[data-unlock]')) { doUnlock(); return; }
   const lm = t.closest('[data-lock-mode]'); if (lm) { if (AUTO.ctrl) { const c = AUTO.ctrl; AUTO.ctrl = null; AUTO.lastEnd = Date.now(); c.abort(); } S.lockMode = lm.dataset.lockMode; S.lockMsg = ''; render(); const f = $('#enroll-name') || $('#backup-code'); if (f) f.focus(); return; }
   if (t.closest('[data-lock-now]')) { lockNow(''); return; }
@@ -1271,7 +1403,7 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-backup-note-close]')) { S.backupNote = false; render(); return; }
   if (t.closest('[data-dev-invite]')) { openInvite(); return; }
   const dr = t.closest('[data-dev-remove]'); if (dr) { confirmRemoveDevice(dr.dataset.devRemove); return; }
-  if (!S.session) return;
+  if (!isOpen()) return;
   const nav = t.closest('[data-page]'); if (nav) { e.preventDefault(); go(nav.dataset.page); return; }
   const per = t.closest('[data-period]'); if (per) { S.spendPeriod = per.dataset.period; S.openCat = null; render(); return; }
   const cat = t.closest('[data-cat]'); if (cat) { S.openCat = S.openCat === cat.dataset.cat ? null : cat.dataset.cat; render(); return; }
@@ -1310,8 +1442,13 @@ document.addEventListener('submit', (e) => {
   if (e.target.id === 'backup-form') { e.preventDefault(); doBackup(e.target); }
   if (e.target.id === 'reenroll-form') { e.preventDefault(); doReenroll(e.target); }
 });
-$('#refresh').addEventListener('click', () => { if (!S.session) return; if (!S.facts) loadFacts(); load({ manual: true }); });
-window.addEventListener('popstate', () => { const { p } = readHash(); S.page = PAGES.some(([id]) => id === p) ? p : 'week'; render(); });
+$('#refresh').addEventListener('click', () => { if (!isOpen()) return; if (!S.facts) loadFacts(); load({ manual: true }); });
+window.addEventListener('popstate', () => {
+  const { p, tour } = readHash();
+  if (S.demo && !tour) return exitTour();
+  if (!S.demo && !S.session && tour) { S.wantTour = true; S.page = PAGES.some(([id]) => id === p) ? p : 'week'; if (S.tourOn) startTour(); else { render(); checkTour(); } return; }
+  S.page = PAGES.some(([id]) => id === p) ? p : 'week'; render();
+});
 window.addEventListener('scroll', () => $('.top').classList.toggle('scrolled', window.scrollY > 4), { passive: true });
 // Lock again after 5 minutes in the background, or when the 12-hour sign-in runs out.
 function checkAway() {
@@ -1350,6 +1487,7 @@ document.title = `${BRAND_NAME} · ${SUBTITLE}`;
 initKey();
 loadFacts();
 render();
+checkTour();
 Auth.supported().then((r) => { if (!r.ok && !S.session) { S.lockMsg = r.why; render(); } });
 // First open: try Face ID straight away (Safari may want a tap instead; then the button says so quietly).
 if (!window.__OURS_TEST_SESSION__) { armAuto(); maybeAutoUnlock(); }

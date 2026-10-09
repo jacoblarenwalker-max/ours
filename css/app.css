@@ -455,3 +455,25 @@ body.away .main, body.away .top .status { filter: blur(18px); }
 .backup-card { margin-top: 12px; }
 .backup-row { display: flex; align-items: center; gap: 10px; }
 .backup-row .name { flex: 1; display: grid; gap: 3px; }
+
+/* ---------- demo tour ---------- */
+.demo-ribbon { border-top: 1px solid rgba(212, 198, 164, 0.22); background: rgba(212, 198, 164, 0.07); }
+.demo-ribbon[hidden] { display: none; }
+.demo-inner { max-width: 1040px; margin: 0 auto; padding: 7px var(--pad); display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--warn); }
+.demo-inner b { font-weight: 600; }
+.demo-btns { display: inline-flex; align-items: center; gap: 14px; flex: none; }
+.demo-btns .linkish { color: var(--muted); font-size: 13.5px; }
+.demo-btns .btn.small { padding: 6px 12px; font-size: 13.5px; }
+.locked .lock-tour { margin: 34px 0 0; font-size: 14.5px; padding-top: 18px; border-top: 1px solid var(--line); }
+.locked .lock-tour[hidden] { display: none; }
+.locked .lock-tour .linkish { color: var(--text); text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
+.tour-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.tour-row .name { display: grid; gap: 3px; }
+.switch { flex: none; width: 52px; height: 30px; border-radius: 999px; border: 1px solid var(--line-strong, #3a352c); background: #2b2720; position: relative; cursor: pointer; padding: 0; transition: background .15s ease; }
+.switch span { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted); transition: transform .15s ease, background .15s ease; }
+.switch[aria-checked='true'] { background: var(--green); border-color: #3a7a5e; }
+.switch[aria-checked='true'] span { transform: translateX(22px); background: var(--text); }
+.tour-link-row { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm, 6px); background: #0f0e0b; border: 1px solid var(--line); overflow-x: auto; }
+.tour-link-row code { font-size: 13.5px; color: var(--text); white-space: nowrap; }
+.tour-card a.btn { text-decoration: none; display: inline-flex; align-items: center; }
+body.is-demo .status { visibility: hidden; }
