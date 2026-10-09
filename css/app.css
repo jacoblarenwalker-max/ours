@@ -306,9 +306,9 @@ button.tile:hover { border-color: var(--green-line); }
 .sp-btn { font: inherit; text-decoration-thickness: 1px; }
 
 /* ---------- target card (Week, right under the hero) ---------- */
-.target-card { background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--green); border-radius: var(--r); padding: clamp(20px, 5vw, 28px); transition: border-color .2s; }
+.target-card, .tithe-card { background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--green); border-radius: var(--r); padding: clamp(20px, 5vw, 28px); transition: border-color .2s; }
 .target-card[data-sheet]:hover { border-color: var(--green-line); border-top-color: var(--green); }
-.target-card .label { color: var(--muted); font-size: 12px; font-weight: 550; letter-spacing: 0.06em; text-transform: uppercase; margin: 0; }
+.target-card .label, .tithe-card .label { color: var(--muted); font-size: 12px; font-weight: 550; letter-spacing: 0.06em; text-transform: uppercase; margin: 0; }
 .t-big { font-family: var(--display); font-weight: 540; font-size: clamp(46px, 13vw, 64px); letter-spacing: -0.035em; line-height: 1; margin: 16px 0 0; font-variation-settings: 'opsz' 72, 'SOFT' 0, 'WONK' 0; font-variant-numeric: lining-nums; }
 .t-big-sub { font-family: var(--body); font-size: 17px; font-weight: 450; color: var(--muted); letter-spacing: 0; white-space: nowrap; }
 .tbar.thick { height: 18px; border-radius: 4px; margin: 20px 0 10px; }

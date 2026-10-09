@@ -7,7 +7,7 @@
 // What was paid: purchases already sorted into Giving (so a payment is seen in spending too, as before), plus any
 // payments marked by hand. Adjustments (+/-) change what a week owes. Payments are applied to the oldest unpaid
 // week first, so paying a little more or less one week carries over and evens out.
-import { summarize, weekStart, addDays } from './logic.js?v=18';
+import { summarize, weekStart, addDays } from './logic.js?v=19';
 
 export const DEFAULT_PCT = 10;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;

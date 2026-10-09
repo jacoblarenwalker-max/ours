@@ -1,12 +1,12 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=18';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=19';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=18';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=18';
-import * as Auth from './auth.js?v=18';
-import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=18';
-import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=18';
+} from './logic.js?v=19';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=19';
+import * as Auth from './auth.js?v=19';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=19';
+import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=19';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -782,7 +782,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=18', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=19', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -1331,7 +1331,7 @@ function titheCard() {
   if (l) lines.push(row(`tithe|${l.ws}`, `Last week · ${weekLabel(l.ws)}`, l.due < 0.005 ? 'Nothing due' : m2(l.due), `${l.due < 0.005 ? 'No income counted' : `${tithePct(T)} of ${m2(l.income)} · ${titheStatus(l).toLowerCase()}`}`));
   if (T.carried > 0.004) lines.push(row('tithe-all', 'Carried over from before', m2(T.carried), 'unpaid from earlier weeks'));
   lines.push(row(`tithe|${c.ws}`, `This week so far · ${shortDate(c.ws)} to today`, m2(c.due), `${tithePct(T)} of ${m2(c.income)} coming in${c.pending > 0 ? `, ${m2(c.pending)} pending` : ''}${c.paid > 0.004 ? ` · ${m2(c.paid)} already paid toward it` : ''}`));
-  return `<section class="section"><div class="target-card tithe-card" data-tithe>
+  return `<section class="section"><div class="tithe-card" data-tithe>
     <div class="target-top"><span class="label">Tithing this week · ${tithePct(T)}</span><button type="button" class="linkish target-edit" data-tithe-settings>Settings</button></div>
     <p class="t-big">${big}</p>
     <p class="t-pace">${T.toPay > 0.004 ? `For the weeks that are over. This week's ${m2(c.due)} so far joins it on Monday.` : 'Weeks that are over are covered. This week\'s is added on Monday.'}</p>
