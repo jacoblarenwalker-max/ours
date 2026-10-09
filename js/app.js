@@ -1,11 +1,11 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=15';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=16';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=15';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=15';
-import * as Auth from './auth.js?v=15';
-import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=15';
+} from './logic.js?v=16';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=16';
+import * as Auth from './auth.js?v=16';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=16';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -186,14 +186,14 @@ function openReenroll() {
   openSheet(`<h3>Set up Face ID on this device</h3>
     <p>So next time Ours opens with Face ID instead of a backup code.</p>
     <form id="reenroll-form" class="form" autocomplete="off">
-      <div class="field"><label for="reenroll-name">Name this device</label><input id="reenroll-name" name="name" maxlength="40" required autocomplete="off" placeholder="Jacob’s iPhone"></div>
+      <div class="field"><label for="reenroll-name">Name this device</label><input id="reenroll-name" name="name" maxlength="40" required autocomplete="off" placeholder="${esc(exampleDevice())}"></div>
       <div class="btns"><button class="btn" type="submit">${FACE}<span>Set up Face ID</span></button><button type="button" class="btn ghost" data-close>Not now</button></div>
     </form>`, () => {});
   const f = $('#reenroll-name'); if (f) f.focus();
 }
 async function doReenroll(form) {
   const name = form.name.value.trim().replace(/\s+/g, ' ');
-  if (!name) return toast('Give this device a name, like Jacob’s iPhone.');
+  if (!name) return toast(`Give this device a name, like ${exampleDevice()}.`);
   const btn = form.querySelector('button[type=submit]'); btn.disabled = true;
   try {
     const old = S.session;
@@ -206,6 +206,15 @@ async function doReenroll(form) {
     toast(e.message || "Couldn't set up Face ID. Try again.", 6000);
   }
 }
+// A neutral example name for the device being set up (no personal names on the public site).
+function exampleDevice() {
+  const ua = navigator.userAgent || '';
+  if (/iPhone/.test(ua)) return 'My iPhone';
+  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'My iPad';
+  if (/Android/.test(ua)) return /Mobile/.test(ua) ? 'My phone' : 'My tablet';
+  if (/Macintosh|Windows|Linux|CrOS/.test(ua)) return 'My computer';
+  return 'My iPhone';
+}
 function parseSetupCode(v) {
   v = String(v || '').trim(); if (!v) return {};
   const m = v.match(/[#&]k=([^&\s]+)/); if (m) return { key: decodeURIComponent(m[1]) };
@@ -215,7 +224,7 @@ function parseSetupCode(v) {
 async function doEnroll(form) {
   if (S.lockBusy) return;
   const name = form.name.value.trim().replace(/\s+/g, ' ');
-  if (!name) { S.lockMsg = 'Give this device a name, like Jacob’s iPhone.'; return render(); }
+  if (!name) { S.lockMsg = `Give this device a name, like ${exampleDevice()}.`; return render(); }
   const typed = form.code ? parseSetupCode(form.code.value) : {};
   const secret = typed.key || typed.invite ? typed : { key: S.linkKey };
   if (!secret.key && !secret.invite) { S.lockMsg = 'Open Ours from our private link, or type a setup code from a device that is already unlocked.'; return render(); }
@@ -769,7 +778,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=15', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=16', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -1146,7 +1155,7 @@ function lockedView() {
     <h2>Set up Face ID</h2>
     <p>Once on each phone or computer. After this, Ours opens only with Face ID, Touch ID or Windows Hello.</p>
     <form id="enroll" class="form" autocomplete="off">
-      <div class="field"><label for="enroll-name">Name this device</label><input id="enroll-name" name="name" maxlength="40" required autocomplete="off" placeholder="Jacob’s iPhone" value="${esc(S.draftDevice || '')}"></div>
+      <div class="field"><label for="enroll-name">Name this device</label><input id="enroll-name" name="name" maxlength="40" required autocomplete="off" placeholder="${esc(exampleDevice())}" value="${esc(S.draftDevice || '')}"></div>
       ${needCode ? `<div class="field"><label for="enroll-code">Setup code or our private link</label><input id="enroll-code" name="code" required autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-2345"><p class="faint field-hint">Get a code on a device that is already unlocked: Worth, then Devices, then Add a device.</p></div>` : ''}
       <button class="btn lock-btn" type="submit" ${busy ? 'disabled' : ''}>${FACE}<span>${busy ? 'Setting up…' : 'Set up Face ID'}</span></button>
     </form>
