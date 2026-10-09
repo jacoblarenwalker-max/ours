@@ -1,7 +1,7 @@
 // The demo tour's made-up household. Everything here is fictional: the couple, employers, banks, stores and
 // numbers. Nothing is read from or derived from our real data; it is built in the browser from this file alone,
 // with dates relative to today, in the same shape as a real bank pull so every page runs the same code.
-import { addDays, weekStart } from './logic.js?v=16';
+import { addDays, weekStart } from './logic.js?v=17';
 
 // Wording the pages use where the real app names our own investing account.
 export const DEMO_WORDS = {
@@ -64,7 +64,7 @@ export function makeDemo(today, seed = 1) {
     if (dom === 18) add(d, 'demo-chk', 'cash', 'Juniper Store Card payment', -amt(85, 140), 'card_payment');
     if (dom === 20) { add(d, 'demo-chk', 'cash', 'Transfer to Cedar Savings', -500, 'transfer'); add(d, 'demo-sav', 'cash', 'Transfer from Pinecrest Checking', 500, 'transfer'); }
     if (dom === 22) debit(d, 'Granite Auto Insurance', 112, 'gas');
-    if (dom === 26) card(d, 'Community Food Bank', 100, 100, 'giving');
+    if (dom === 26) card(d, 'Community Food Bank', 40, 40, 'giving');
     // everyday purchases
     if (dow === 6) card(d, 'Hilltop Market', 72, 158, 'groceries');
     if (dow === 3) card(d, 'Green Basket Co-op', 24, 71, 'groceries');
@@ -76,6 +76,16 @@ export function makeDemo(today, seed = 1) {
     if (R() < 0.05) card(d, 'Starlight Cinema', 24, 36, 'fun');
     if (R() < 0.03) card(d, 'Willow Pharmacy', 8, 40, 'health');
     if (R() < 0.035) card(d, 'Corner Hardware', 12, 64, 'other');
+  }
+  // weekly tithing at the church, a day after the week closes: about 10% of that week's income, a little off some weeks
+  const wk = {}; for (const t of txns) if (t.kind0 === 'income') { const k = weekStart(t.date); wk[k] = (wk[k] || 0) + t.amount; }
+  let skipped = 0;
+  for (const k of Object.keys(wk).sort()) {
+    const pay = addDays(k, 7 + (R() < 0.3 ? 1 : 0)); if (pay >= addDays(today, -6) || k <= addDays(from, 6)) continue;   // the newest week is still to pay
+    const due = wk[k] * 0.1; const roll = R();
+    if (roll < 0.10 && skipped < 2 && pay < addDays(today, -21)) { skipped++; continue; }   // a missed week, caught up later
+    const give = Math.round(roll > 0.78 ? due * 1.25 : roll > 0.5 ? due * 0.95 : due);
+    if (give >= 5) add(pay, 'demo-chk', 'cash', 'Hillcrest Community Church', -give, 'spend', 'giving');
   }
   // a few one-time moments
   const couch = addDays(today, -52);
@@ -112,6 +122,7 @@ export function makeDemo(today, seed = 1) {
     ],
     fixes: [{ merchant_key: 'corner hardware', merchant_label: 'Corner Hardware', set_to: 'home' }],
     settings: { weekly_target: 500 },
+    tithing: [],
     open_request: null,
   };
 }
@@ -127,7 +138,9 @@ export function demoWrite(data, fn, body) {
   if (fn === 'ours_item_delete') return true;
   if (fn === 'ours_fix_set') return { merchant_key: body.p_merchant_key, merchant_label: body.p_merchant_label, set_to: body.p_set_to };
   if (fn === 'ours_fix_clear') return true;
-  if (fn === 'ours_setting_set') { if (body.p_name !== 'weekly_target') throw new Error('not in the tour'); return { name: body.p_name, value: body.p_value }; }
+  if (fn === 'ours_setting_set') { if (!['weekly_target', 'tithing_pct', 'tithing_start', 'tithing_skip'].includes(body.p_name)) throw new Error('not in the tour'); return { name: body.p_name, value: body.p_value }; }
+  if (fn === 'ours_tithe_save') return { id: `demo-tithe-${++nextItem}`, week: body.p_week, kind: body.p_kind, amount: body.p_amount, note: body.p_note, created_at: new Date().toISOString() };
+  if (fn === 'ours_tithe_delete') return true;
   if (fn === 'ours_request_refresh' || fn === 'ours_latest') return null;
   throw new Error('not in the tour');
 }

@@ -477,3 +477,28 @@ body.away .main, body.away .top .status { filter: blur(18px); }
 .tour-link-row code { font-size: 13.5px; color: var(--text); white-space: normal; word-break: break-all; }
 .tour-card a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 body.is-demo .status { visibility: hidden; }
+
+/* ---------- tithing ---------- */
+.tithe-card .t-big { font-size: clamp(38px, 10.5vw, 50px); margin-top: 14px; }
+.tithe-card .t-pace { font-size: 15px; color: var(--muted); margin-top: 12px; }
+.tithe-card .tithe-list { margin-top: 16px; }
+.tithe-card .tithe-list li { padding: 12px 0; }
+.tithe-card .numbered li::before { content: none; }
+.tithe-card .numbered li { grid-template-columns: 1fr auto; }
+.tithe-card .numbered .v { grid-column: 1; font-size: 17px; }
+.tithe-card .numbered .chev { grid-column: 2; }
+.tithe-card .numbered .v small { display: block; margin-top: 2px; line-height: 1.4; }
+.tithe-note { font-size: 12.5px; line-height: 1.5; margin: 6px 0 0; }
+.tithe-tag { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 0 5px; border-radius: 3px; vertical-align: 2px; font-family: var(--body); line-height: 16px; white-space: nowrap; }
+.tithe-tag.paid { color: var(--up); border: 1px solid rgba(58, 122, 94, 0.45); }
+.tithe-tag.owed { color: var(--warn); border: 1px solid rgba(212, 198, 164, 0.4); }
+.tithe-tag.now { color: var(--faint); border: 1px solid var(--line-strong); }
+.hist td.tithe-td { white-space: nowrap; }
+.tithe-wk { align-items: center; }
+.tithe-wk .w small { display: block; font-size: 12.5px; }
+.tithe-wk .chev { width: 14px; height: 14px; flex: none; color: var(--faint); }
+.tithe-actions { margin-top: 18px; }
+.sheet select { background: var(--bg); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 12px 14px; font-size: 16px; width: 100%; color: var(--text); font-family: inherit; }
+.inc-head .n .linkish { color: var(--muted); font-size: 12.5px; }
+.inc-rows .linkish { color: var(--muted); font-size: 12.5px; margin-left: 4px; }
+.inc-rows li.wrap .w { white-space: normal; overflow: visible; text-overflow: clip; }

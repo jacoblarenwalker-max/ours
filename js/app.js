@@ -1,11 +1,12 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=16';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=17';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=16';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=16';
-import * as Auth from './auth.js?v=16';
-import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=16';
+} from './logic.js?v=17';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=17';
+import * as Auth from './auth.js?v=17';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=17';
+import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=17';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -439,7 +440,7 @@ function weekView() {
   const li = (sheet, t, v, cls = '') => sheet
     ? `<li class="tap" role="button" tabindex="0" data-sheet="${sheet}"><span class="t">${t}</span><span class="v ${cls}">${v}</span>${CHEV}</li>`
     : `<li><span class="t">${t}</span><span class="v ${cls}">${v}</span></li>`;
-  html += weekHero(tw, L);
+  html += weekHero(tw, L) + titheCard();
   html += `
   <section class="section">
     <article class="letter">
@@ -454,6 +455,7 @@ function weekView() {
         ${li(pick ? `tx|${pick.id}` : '', 'Story item', pick ? `${esc(pick.label)} · ${m2(pick.spend)} <small>${weekdayName(pick.date)}${pick.note ? ` · “${esc(pick.note)}”` : ''}</small>` : 'Nothing stood out.')}
         ${li(last.investRows.length ? `invest|${lw}` : '', 'Investing', last.investing > 0 ? `${m2(last.investing)} <small>${W().invInto}</small>` : 'Nothing this week.')}
         ${li(last.incomeRows.length ? `income|${lw}` : '', 'Income received', `${m2(last.income)}${last.incomeRows.length ? '' : ' <small>Nothing came in.</small>'}`, last.income > 0 ? 'up' : '')}
+        ${titheLetterRow()}
         ${li(last.transferRows.length || last.cardRows.length ? `moves|${lw}` : '', 'Transfers and card payments', `${m2(last.transfers)} <small>moved between our accounts</small> · ${m2(last.cardPayments)} <small>paid to cards. Not new spending.</small>`)}
       </ol>
     </article>
@@ -748,6 +750,8 @@ function historyView() {
   };
   const wkTitle = (r) => (r.current ? 'This week so far' : 'Week');
   const cell = (kind, r, val, cls, n) => n ? `<button type="button" class="linkish ${cls}" data-sheet="${kind}|${r.w.from}|${r.current ? today() : r.w.to}|${wkTitle(r)}${kind === 'spent' ? '|cat' : ''}">${m0(val)}</button>` : `<span class="${cls}">${m0(val)}</span>`;
+  const TT = titheT();
+  const tcell = (r) => { const w = TT && TT.weeks.find((x) => x.ws === r.w.from); return w ? `<button type="button" class="linkish" data-sheet="tithe|${w.ws}">${m0(w.due)}</button> ${titheTag(w)}` : '<span class="faint">–</span>'; };
   const target = targetOf();
   const mark = (r) => {
     const v = vsTarget(r.w.spend, target);
@@ -755,11 +759,11 @@ function historyView() {
     return v.state === 'over' ? `<span class="tmark over" title="${m0(v.diff)} over the ${m0(target)} target">over</span>` : `<span class="tmark under" title="${m0(v.diff)} under the ${m0(target)} target">under</span>`;
   };
   if (target) html = html.replace('Monday to Sunday, Mountain time.', `Monday to Sunday, Mountain time. Each week is marked against our ${m0(target)} target.`);
-  html += `<table class="hist"><thead><tr><th>Week</th><th>Spending</th><th>vs week before</th><th>Income</th><th>Investing</th></tr></thead><tbody>
-    ${rowsData.map((r) => `<tr class="${r.current ? 'current' : ''}"><td>${weekLabel(r.w.from)}</td><td>${mark(r)}${cell('spent', r, r.w.spend, '', r.w.items.length)}</td><td>${vs(r)}</td><td><button type="button" class="linkish ${r.w.income > 0 ? 'up' : 'faint'}" data-sheet="income|${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></td><td>${cell('invest', r, r.w.investing, r.w.investing > 0 ? 'warn' : 'faint', r.w.investRows.length)}</td></tr>`).join('')}
+  html += `<table class="hist"><thead><tr><th>Week</th><th>Spending</th><th>vs week before</th><th>Income</th><th>Investing</th><th>Tithing</th></tr></thead><tbody>
+    ${rowsData.map((r) => `<tr class="${r.current ? 'current' : ''}"><td>${weekLabel(r.w.from)}</td><td>${mark(r)}${cell('spent', r, r.w.spend, '', r.w.items.length)}</td><td>${vs(r)}</td><td><button type="button" class="linkish ${r.w.income > 0 ? 'up' : 'faint'}" data-sheet="income|${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></td><td>${cell('invest', r, r.w.investing, r.w.investing > 0 ? 'warn' : 'faint', r.w.investRows.length)}</td><td class="tithe-td">${tcell(r)}</td></tr>`).join('')}
   </tbody></table>
   <div class="hist-cards">${rowsData.map((r) => `<div class="hcard"><div class="top-row"><span class="wk">${weekLabel(r.w.from)}${r.current ? ' <span class="faint">· so far</span>' : ''}</span><span class="sp">${mark(r)}${cell('spent', r, r.w.spend, 'sp-btn', r.w.items.length)}</span></div>
-    <div class="meta"><span>vs before ${vs(r)}</span><span>In <button type="button" class="linkish ${r.w.income > 0 ? 'up' : ''}" data-sheet="income|${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></span><span>Invested ${cell('invest', r, r.w.investing, r.w.investing > 0 ? 'warn' : '', r.w.investRows.length)}</span></div></div>`).join('')}</div>
+    <div class="meta"><span>vs before ${vs(r)}</span><span>In <button type="button" class="linkish ${r.w.income > 0 ? 'up' : ''}" data-sheet="income|${r.w.from}|${r.w.to}|${r.current ? 'This week so far' : 'Week'}">${m0(r.w.income)}</button></span><span>Invested ${cell('invest', r, r.w.investing, r.w.investing > 0 ? 'warn' : '', r.w.investRows.length)}</span><span>Tithing ${tcell(r)}</span></div></div>`).join('')}</div>
   <p class="foot">Activity starts ${shortDate(from)}${from.slice(0, 4) !== t.slice(0, 4) ? ' ' + from.slice(0, 4) : ''}, so the oldest week may be partial.</p>`;
   return html;
 }
@@ -778,7 +782,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=16', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=17', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -815,6 +819,8 @@ function planView() {
       <span class="mo-v"><span class="up">${m0(m.income)}</span><span>${m0(out)}</span>${m.oneOff ? `<small class="warn">+${m0(m.oneOff)} one-time</small>` : ''}</span>${CHEV}</li>`; }).join('')}
   </ul><p class="mo-key"><span><i class="k in"></i>In</span><span><i class="k out"></i>Out: purchases${A.unseen > 0 ? ` + ${esc(A.unseenName)} payments` : ''}</span></p></div>
   <p class="note">${A.oneOffs.length ? `Left out of the usual month: ${A.oneOffs.map((r) => `${esc(r.label)} ${m0(r.spend)} (${shortDate(r.date)})`).join(', ')}. ` : ''}Income counts every deposit tagged as income, ${W().incomeNote}. ${A.invested > 0 ? `${W().invBuys} (${m0(A.invested)} a month) count as saving, not spending.` : ''}</p></section>`;
+
+  html += titheTiles();
 
   // next steps
   const MAIN = 6;
@@ -1100,6 +1106,8 @@ function openSheetFor(spec) {
   if (kind === 'own') return openOwnSheet(a[0] || '');
   if (kind === 'owe') return openOweSheet();
   if (kind === 'target') return openTargetByDay();
+  if (kind === 'tithe') return openTitheSheet(a[0]);
+  if (kind === 'tithe-all') return openTitheAll();
   if (!planData()) return;
   if (kind === 'plan-months') return openPlanMonths();
   if (kind === 'plan-month') return openPlanMonth(a[0]);
@@ -1294,6 +1302,177 @@ async function openInvite() {
   }
 }
 
+// ---------------------------------------------------------------- tithing
+// 10% (changeable) of what came in each Monday-Sunday week. The math lives in tithe.js, shared with the box scripts.
+// Giving purchases already count as spending and toward the weekly target; nothing here changes that or counts twice.
+const NO_ENTRIES = [];
+let titheMemo = { k: null, T: null };
+function titheT() {
+  const sn = snap(); if (!sn || !S.data) return null;
+  const k = [S.rows, S.data.settings, S.data.tithing || NO_ENTRIES, today()];
+  if (titheMemo.k && titheMemo.k.every((x, i) => x === k[i])) return titheMemo.T;
+  const T = computeTithing({ rows: S.rows, today: today(), coverageFrom: sn.coverage.from, settings: S.data.settings, entries: S.data.tithing || NO_ENTRIES });
+  titheMemo = { k, T }; return T;
+}
+const tithePct = (T) => `${Number.isInteger(T.pct) ? T.pct : T.pct.toFixed(1).replace(/\.0$/, '')}%`;
+function titheStatus(w) {
+  if (w.status === 'none') return 'Nothing due';
+  if (w.status === 'paid') return 'Paid in full';
+  if (w.status === 'partly') return `Paid ${m2(w.paid)} of ${m2(w.due)}`;
+  return 'Not paid yet';
+}
+const titheTag = (w) => (w.current ? '<span class="tithe-tag now">so far</span>' : w.status === 'paid' ? '<span class="tithe-tag paid">paid</span>' : w.status === 'none' ? '' : `<span class="tithe-tag owed">${w.status === 'partly' ? 'owes ' + m0(w.owed) : 'owed'}</span>`);
+function titheCard() {
+  const T = titheT(); if (!T || !T.cur) return '';
+  const c = T.cur, l = T.last;
+  const row = (sheet, t, v, small) => `<li class="tap" role="button" tabindex="0" data-sheet="${sheet}"><span class="t">${t}</span><span class="v">${v}${small ? ` <small>${small}</small>` : ''}</span>${CHEV}</li>`;
+  const big = T.toPay > 0.004 ? `${m2(T.toPay)} <span class="t-big-sub">to pay now</span>` : T.pool > 0.004 ? `${m2(T.pool)} <span class="t-big-sub">paid ahead</span>` : `${m0(0)} <span class="t-big-sub">to pay. All paid up.</span>`;
+  const lines = [];
+  if (l) lines.push(row(`tithe|${l.ws}`, `Last week · ${weekLabel(l.ws)}`, l.due < 0.005 ? 'Nothing due' : m2(l.due), `${l.due < 0.005 ? 'No income counted' : `${tithePct(T)} of ${m2(l.income)} · ${titheStatus(l).toLowerCase()}`}`));
+  if (T.carried > 0.004) lines.push(row('tithe-all', 'Carried over from before', m2(T.carried), 'unpaid from earlier weeks'));
+  lines.push(row(`tithe|${c.ws}`, `This week so far · ${shortDate(c.ws)} to today`, m2(c.due), `${tithePct(T)} of ${m2(c.income)} coming in${c.pending > 0 ? `, ${m2(c.pending)} pending` : ''}${c.paid > 0.004 ? ` · ${m2(c.paid)} already paid toward it` : ''}`));
+  return `<section class="section"><div class="target-card tithe-card" data-tithe>
+    <div class="target-top"><span class="label">Tithing this week · ${tithePct(T)}</span><button type="button" class="linkish target-edit" data-tithe-settings>Settings</button></div>
+    <p class="t-big">${big}</p>
+    <p class="t-pace">${T.toPay > 0.004 ? `For the weeks that are over. This week's ${m2(c.due)} so far joins it on Monday.` : 'Weeks that are over are covered. This week\'s is added on Monday.'}</p>
+    <ol class="numbered tithe-list">${lines.join('')}</ol>
+    <p class="faint tithe-note">Gifts we give still count as Giving in our spending and in the weekly target, as before. This card only compares them with what we owe, so nothing is counted twice.</p>
+    <div class="btns" style="margin-top:14px">${T.toPay > 0.004 ? `<button type="button" class="btn small" data-tithe-markpaid>Mark ${m2(T.toPay)} as paid</button>` : ''}<button type="button" class="btn ghost small" data-sheet="tithe-all">Week by week</button></div>
+  </div></section>`;
+}
+function titheLetterRow() {
+  const T = titheT(); if (!T || !T.last) return '';
+  const l = T.last;
+  return `<li class="tap" role="button" tabindex="0" data-sheet="tithe|${l.ws}"><span class="t">Tithing</span><span class="v">${l.due < 0.005 ? 'Nothing due' : `${m2(l.due)} due`} <small>${l.due < 0.005 ? 'No income counted last week.' : `${tithePct(T)} of ${m2(l.income)}. ${titheStatus(l)}.`}${T.toPay > 0.004 && T.toPay - l.owed > 0.004 ? ` ${m2(T.toPay)} to pay in all, with what was carried over.` : ''}</small></span>${CHEV}</li>`;
+}
+
+// One week: where the income came from (with each source's share), what counts, what was paid.
+function openTitheSheet(ws) {
+  const T = titheT(); const w = T && T.weeks.find((x) => x.ws === ws);
+  if (!w) return openSheet(`<h3>Before we started counting</h3><p>Tithing is counted from the week of ${T ? shortDate(T.first) : 'the first full week we have'}. Change that in Settings.</p><div class="btns"><button type="button" class="btn ghost" data-close>Done</button></div>`, () => {});
+  S.titheOpen = ws;
+  const pct = T.pct / 100;
+  const srcs = groupBy(w.counted, (r) => r.key, (r) => r.label, (r) => r.amount).sort((a, b) => b.total - a.total);
+  const srcHtml = srcs.map((g) => {
+    const anyPend = g.rows.some((r) => r.pending);
+    return `<div class="inc-group"><div class="inc-head"><span class="n">${esc(g.label)}${anyPend ? ' <span class="pend">pending</span>' : ''}<small>${plural(g.rows.length, 'deposit')} · ${m2(g.total)} × ${tithePct(T)} · <button type="button" class="linkish" data-tithe-skip="${esc(g.key)}">Leave out</button></small></span><span class="t">${m2(g.total * pct)}</span></div>
+      <ul class="inc-rows">${g.rows.map((r) => line(`${dayShort(r.date)}${r.acct ? ` · ${esc(r.acct.display)}` : ''}${pend(r)}${noteOf(r)}`, signed(r.amount))).join('')}</ul></div>`;
+  }).join('');
+  const skipped = groupBy(w.skipped, (r) => r.key, (r) => r.label, (r) => r.amount);
+  const skipHtml = skipped.length ? `<div class="inc-group"><div class="inc-head"><span class="n">Left out<small>Not counted for tithing, still counted as income elsewhere</small></span><span class="t faint">${m2(sum(skipped, (g) => g.total))}</span></div>
+    <ul class="inc-rows">${skipped.map((g) => line(`${esc(g.label)} <span class="faint">· ${plural(g.rows.length, 'deposit')}</span> <button type="button" class="linkish" data-tithe-unskip="${esc(g.key)}">Count it</button>`, m2(g.total), 'wrap')).join('')}</ul></div>` : '';
+  const entryLine = (e) => line(`${e.kind === 'paid' ? 'Marked paid' : 'Adjustment'}${e.note ? ` · ${esc(e.note)}` : ''} <button type="button" class="linkish" data-tithe-del="${esc(e.id)}">Remove</button>`, e.kind === 'paid' ? m2(Number(e.amount)) : signed(Number(e.amount)), 'wrap');
+  const paidRows = [...w.giveRows.map((r) => line(`${esc(r.label)} <span class="faint">· ${dayShort(r.date)}${r.acct ? ` · ${esc(r.acct.display)}` : ''}</span>${pend(r)}`, m2(r.spend), 'wrap')), ...w.manuals.map(entryLine)];
+  const paidHtml = group('Gifts given this week', 'Purchases in Giving, plus anything marked paid. They go to the oldest unpaid week first, so they may be paying an earlier week.', m2(w.giving + w.manual), paidRows);
+  const adjHtml = w.adjusts.length ? group('Adjustments', 'Added to or taken off what this week owes', signed(w.adj), w.adjusts.map(entryLine)) : '';
+  const sumHtml = group('This week\'s tithing', '', m2(w.due), [
+    line(`${tithePct(T)} of ${m2(w.income)} that came in`, m2(w.base)),
+    ...(w.adj ? [line('Adjustments', signed(w.adj))] : []),
+    line('Paid toward this week', m2(w.paid)),
+    line(w.current ? 'Still owed so far' : 'Still owed', `<b>${m2(w.owed)}</b>`),
+  ]);
+  sheetPage({ kicker: `Tithing · ${weekLabel(w.ws)}${w.current ? ' · so far' : ''}`, title: w.due < 0.005 ? 'Nothing due this week' : w.current ? 'Tithing so far this week' : titheStatus(w),
+    total: m2(w.due), totalClass: '',
+    note: `${tithePct(T)} of the money that came in: paychecks, interest, cashback and other deposits, the same income as Earned. Transfers between our accounts, card payments and refunds are not income. Pending deposits count and are tagged.`,
+    body: sumHtml + (srcHtml || emptyLine('No income counted this week.')) + skipHtml + paidHtml + adjHtml +
+      `<div class="btns tithe-actions">${w.owed > 0.004 ? `<button type="button" class="btn" data-tithe-markpaid="${w.ws}">Mark ${m2(w.owed)} paid</button>` : ''}<button type="button" class="btn ghost" data-tithe-add="${w.ws}">Add a payment or adjustment</button></div>` });
+}
+// Every week, newest first, with what is still owed in total.
+function openTitheAll() {
+  const T = titheT(); if (!T) return; S.titheOpen = null;
+  const rowsHtml = T.weeks.slice().reverse().map((w) => `<li class="tap tithe-wk" role="button" tabindex="0" data-sheet="tithe|${w.ws}"><span class="w">${weekLabel(w.ws)}${w.current ? ' <span class="faint">· so far</span>' : ''}<small class="faint">${m2(w.income)} in · ${titheStatus(w)}</small></span><span class="a">${m2(w.due)}</span>${CHEV}</li>`).join('');
+  sheetPage({ kicker: `Tithing · since ${shortDate(T.first)}`, title: 'Week by week', total: T.toPay > 0.004 ? `${m2(T.toPay)} to pay` : T.pool > 0.004 ? `${m2(T.pool)} ahead` : 'All paid up',
+    note: `${tithePct(T)} of ${m2(T.incomeTotal)} that came in is ${m2(T.dueTotal)}. We have given ${m2(T.givingTotal)} in Giving${T.paidTotal - T.givingTotal > 0.004 ? ` and marked ${m2(T.paidTotal - T.givingTotal)} paid by hand` : ''}. Payments go to the oldest unpaid week first, so paying a bit more or less one week evens out later. This week's ${m2(T.cur.due)} so far is not in the total above until Monday.`,
+    body: `<div class="inc-group"><ul class="inc-rows tithe-weeks">${rowsHtml}</ul></div>
+      <div class="btns"><button type="button" class="btn ghost" data-tithe-settings>Settings</button><button type="button" class="btn ghost" data-tithe-add="${T.cur.ws}">Add a payment or adjustment</button></div>` });
+}
+function openTitheSettings(addWeek = null) {
+  const T = titheT(); if (!T) return; S.titheOpen = null;
+  const weeks = T.weeks.slice().reverse().slice(0, 12);
+  const entries = (S.data.tithing || []).slice().sort((a, b) => (a.week < b.week ? 1 : -1));
+  const sel = addWeek || (T.last ? T.last.ws : T.cur.ws);
+  openSheet(`${XBTN}<p class="kicker" style="margin-bottom:4px">Tithing</p><h3>Settings</h3>
+    <form id="tithe-settings-form" class="form" autocomplete="off">
+      <div class="field"><label for="tithe-pct">Percent of what comes in</label><input id="tithe-pct" name="pct" inputmode="decimal" value="${T.cfg.customPct ? T.pct : DEFAULT_PCT}" placeholder="10"></div>
+      <div class="field"><label for="tithe-start">Count from the week of</label><input id="tithe-start" name="start" type="date" value="${T.first}" min="${esc(snap().coverage.from)}"><p class="faint field-hint">Earlier weeks are left out of what we owe. Our numbers go back to ${shortDate(snap().coverage.from)}.</p></div>
+      <div class="btns"><button class="btn" type="submit">Save</button>${T.cfg.customPct || T.cfg.start ? '<button type="button" class="btn ghost" data-tithe-reset>Back to 10% and the first week</button>' : ''}</div>
+    </form>
+    <div class="inc-group" style="margin-top:22px"><div class="inc-head"><span class="n">Add a payment or adjustment<small>A payment is money given that isn't in Giving (cash, for example). An adjustment adds to or takes off what a week owes, like +20 or −15.</small></span></div></div>
+    <form id="tithe-entry-form" class="form" autocomplete="off">
+      <div class="seg" role="group" aria-label="Kind"><button type="button" data-tithe-kind="paid" aria-pressed="true">Payment</button><button type="button" data-tithe-kind="adjust" aria-pressed="false">Adjustment</button></div>
+      <div class="field"><label for="tithe-week">For the week of</label><select id="tithe-week" name="week">${weeks.map((w) => `<option value="${w.ws}" ${w.ws === sel ? 'selected' : ''}>${weekLabel(w.ws)}${w.current ? ' (this week)' : ''}</option>`).join('')}</select></div>
+      <div class="row2"><div class="field"><label for="tithe-amt">Dollar amount</label><input id="tithe-amt" name="amount" inputmode="decimal" required placeholder="25"></div>
+      <div class="field"><label for="tithe-note">Note (optional)</label><input id="tithe-note" name="note" maxlength="120" placeholder="Cash at church"></div></div>
+      <input type="hidden" name="kind" value="paid">
+      <div class="btns"><button class="btn" type="submit">Add it</button></div>
+    </form>
+    ${entries.length ? `<div class="inc-group"><div class="inc-head"><span class="n">Our entries<small>Added by hand</small></span></div><ul class="inc-rows">${entries.map((e) => line(`${weekLabel(e.week)} · ${e.kind === 'paid' ? 'Payment' : 'Adjustment'}${e.note ? ` · ${esc(e.note)}` : ''} <button type="button" class="linkish" data-tithe-del="${esc(e.id)}">Remove</button>`, e.kind === 'paid' ? m2(Number(e.amount)) : signed(Number(e.amount)), 'wrap')).join('')}</ul></div>` : ''}
+    <div class="btns"><button type="button" class="btn ghost" data-close>Done</button></div>`, () => {});
+}
+async function saveSetting(name, value) {
+  await rpc('ours_setting_set', { p_name: name, p_value: value });
+  const st = { ...(S.data.settings || {}) };
+  if (value === null || (Array.isArray(value) && !value.length)) delete st[name]; else st[name] = value;
+  S.data.settings = st;
+}
+async function saveTitheEntry(week, kind, amount, note) {
+  const saved = await rpc('ours_tithe_save', { p_id: null, p_week: week, p_kind: kind, p_amount: amount, p_note: note || null });
+  S.data.tithing = [...(S.data.tithing || []), saved];
+  return saved;
+}
+async function titheAct(fn, okMsg, reopen) {
+  try { await fn(); render(); if (okMsg) toast(okMsg); if (reopen) reopen(); }
+  catch (e) { if (e.message === 'locked') return; toast("Couldn't save that. Nothing changed. Try again."); }
+}
+function titheSkipSource(key, on) {
+  const cur = (S.data.settings && Array.isArray(S.data.settings.tithing_skip)) ? S.data.settings.tithing_skip : [];
+  const next = on ? [...new Set([...cur, key])] : cur.filter((k) => k !== key);
+  const ws = S.titheOpen;
+  titheAct(() => saveSetting('tithing_skip', next), on ? 'Left out of tithing. It still counts as income.' : 'Counted for tithing again.', () => ws && openTitheSheet(ws));
+}
+function titheMarkPaid(ws) {
+  const T = titheT(); if (!T) return;
+  if (ws) { const w = T.weeks.find((x) => x.ws === ws); if (!w || w.owed < 0.005) return; titheAct(() => saveTitheEntry(w.ws, 'paid', w.owed, 'Marked paid'), `Marked ${m2(w.owed)} paid.`, () => openTitheSheet(w.ws)); return; }
+  if (!T.last || T.toPay < 0.005) return;
+  const amt = T.toPay, wk = T.last.ws;
+  titheAct(() => saveTitheEntry(wk, 'paid', amt, 'Marked paid'), `Marked ${m2(amt)} paid.`);
+}
+function titheDelete(id) {
+  const ws = S.titheOpen; const wasSettings = !!document.querySelector('#tithe-settings-form');
+  titheAct(async () => { await rpc('ours_tithe_delete', { p_id: id }); S.data.tithing = (S.data.tithing || []).filter((e) => e.id !== id); }, 'Removed.', () => { if (wasSettings) openTitheSettings(); else if (ws) openTitheSheet(ws); });
+}
+function titheSettingsSubmit(form) {
+  const raw = String(form.pct.value).replace(/[%\s]/g, '');
+  const n = raw === '' ? null : Number(raw);
+  if (n !== null && (!isFinite(n) || n < 0 || n > 100)) return toast('Use a percent between 0 and 100, like 10.');
+  const start = form.start.value || null; const T = titheT();
+  closeSheet();
+  titheAct(async () => {
+    await saveSetting('tithing_pct', n === null || n === DEFAULT_PCT ? null : Math.round(n * 100) / 100);
+    await saveSetting('tithing_start', !start || start === T.first && !T.cfg.start ? null : start);
+  }, 'Saved. Tithing is figured at ' + (n === null ? DEFAULT_PCT : n) + '%.');
+}
+function titheEntrySubmit(form) {
+  const amount = Number(String(form.amount.value).replace(/[$,\s]/g, ''));
+  const kind = form.kind.value;
+  if (!isFinite(amount) || amount === 0 || (kind === 'paid' && amount < 0)) return toast(kind === 'paid' ? 'Use a dollar amount more than zero, like 25.' : 'Use a dollar amount like 20 or −15.');
+  const week = form.week.value, note = form.note.value.trim().slice(0, 120);
+  closeSheet();
+  titheAct(() => saveTitheEntry(week, kind, Math.round(amount * 100) / 100, note), kind === 'paid' ? `Marked ${m2(amount)} paid.` : 'Adjustment saved.', () => openTitheSheet(week));
+}
+// Plan: giving made against what we owe, over every week counted.
+function titheTiles() {
+  const T = titheT(); if (!T || T.weeks.length < 2) return '';
+  const left = T.dueTotal - T.paidTotal;
+  return `<section class="section"><p class="kicker">Giving and tithing</p>
+    <div class="tiles three">
+      <button type="button" class="tile" data-sheet="tithe-all"><div class="label">${tithePct(T)} of income</div><div class="num">${m0(T.dueTotal)}</div><div class="tap-hint">since ${shortDate(T.first)} ${CHEV}</div></button>
+      <button type="button" class="tile" data-sheet="tithe-all"><div class="label">Given</div><div class="num up">${m0(T.paidTotal)}</div><div class="tap-hint">Giving + marked paid ${CHEV}</div></button>
+      <button type="button" class="tile" data-sheet="tithe-all"><div class="label">${left > 0.004 ? 'Still to pay' : 'Ahead'}</div><div class="num ${left > 0.004 ? '' : 'up'}">${m0(Math.abs(left))}</div><div class="tap-hint">incl. this week so far ${CHEV}</div></button>
+    </div>
+    <p class="note">${titheSentence(T, m2)} Gifts are counted in spending as Giving, as before.</p></section>`;
+}
+
 // ---------------------------------------------------------------- demo tour
 // A walk through every page with a made-up household (js/demo.js). It runs the same views and drill-downs, but
 // S.data comes from the generator, writes are answered in memory (see rpc), and it never asks Supabase for data.
@@ -1401,6 +1580,19 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-tour-cancel]')) { S.wantTour = false; writeHash(true); render(); return; }
   if (t.closest('[data-tour-toggle]')) { if (S.session && !S.demo) setTour(!tourIsOn()); return; }
   if (t.closest('[data-tour-copy]')) { copyText(tourLink(), 'Copied. Send it to anyone you want to show.'); return; }
+  if (isOpen()) {
+    const sk = t.closest('[data-tithe-skip]'); if (sk) { titheSkipSource(sk.dataset.titheSkip, true); return; }
+    const us = t.closest('[data-tithe-unskip]'); if (us) { titheSkipSource(us.dataset.titheUnskip, false); return; }
+    const td = t.closest('[data-tithe-del]'); if (td) { titheDelete(td.dataset.titheDel); return; }
+    const mp = t.closest('[data-tithe-markpaid]'); if (mp) { titheMarkPaid(mp.dataset.titheMarkpaid || null); return; }
+    const ta = t.closest('[data-tithe-add]'); if (ta) { openTitheSettings(ta.dataset.titheAdd); return; }
+    if (t.closest('[data-tithe-settings]')) { openTitheSettings(); return; }
+    if (t.closest('[data-tithe-reset]')) { closeSheet(); titheAct(async () => { await saveSetting('tithing_pct', null); await saveSetting('tithing_start', null); }, 'Back to 10% from the first full week.'); return; }
+    const tk = t.closest('[data-tithe-kind]'); if (tk) {
+      document.querySelectorAll('[data-tithe-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b === tk)));
+      const f = $('#tithe-entry-form'); f.kind.value = tk.dataset.titheKind; f.amount.placeholder = tk.dataset.titheKind === 'paid' ? '25' : '20 or -15'; return;
+    }
+  }
   if (t.closest('[data-unlock]')) { doUnlock(); return; }
   const lm = t.closest('[data-lock-mode]'); if (lm) { if (AUTO.ctrl) { const c = AUTO.ctrl; AUTO.ctrl = null; AUTO.lastEnd = Date.now(); c.abort(); } S.lockMode = lm.dataset.lockMode; S.lockMsg = ''; render(); const f = $('#enroll-name') || $('#backup-code'); if (f) f.focus(); return; }
   if (t.closest('[data-lock-now]')) { lockNow(''); return; }
@@ -1447,6 +1639,8 @@ document.addEventListener('submit', (e) => {
     if (!isFinite(n) || n < 1 || n > 1000000) return toast('Use a dollar amount, like 400.');
     saveTarget(Math.round(n * 100) / 100);
   }
+  if (e.target.id === 'tithe-settings-form') { e.preventDefault(); titheSettingsSubmit(e.target); }
+  if (e.target.id === 'tithe-entry-form') { e.preventDefault(); titheEntrySubmit(e.target); }
   if (e.target.id === 'enroll') { e.preventDefault(); doEnroll(e.target); }
   if (e.target.id === 'backup-form') { e.preventDefault(); doBackup(e.target); }
   if (e.target.id === 'reenroll-form') { e.preventDefault(); doReenroll(e.target); }
