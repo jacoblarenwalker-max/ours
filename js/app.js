@@ -1,10 +1,10 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=13';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=14';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=13';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=13';
-import * as Auth from './auth.js?v=13';
+} from './logic.js?v=14';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=14';
+import * as Auth from './auth.js?v=14';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -106,19 +106,48 @@ function lockNow(msg = '', { revoke = true } = {}) {
   S.via = 'passkey'; S.backup = null; S.newCodes = null; S.backupNote = false;
   planMemo = { rows: null, items: null, facts: null, out: null };
   clearTimeout(expTimer); clearTimeout(pollTimer); closeSheet();
-  S.lockMode = 'unlock'; S.lockMsg = msg; S.lockBusy = false;
+  S.lockMode = 'unlock'; S.lockMsg = msg; S.lockBusy = false; S.lockHint = '';
   if (revoke && tok) Auth.call('logout', { session: tok }).catch(() => {});
   render(); window.scrollTo({ top: 0 });
 }
 function sessionLive() { return !!S.session && Date.now() < S.sessionExp; }
-async function doUnlock() {
+// Automatic Face ID on the lock screen: once on open, and once each time Ours comes back into view while locked
+// (including the 5-minute relock). Never while a prompt is up, never right after one ended (a cancel), and never on
+// the setup or backup-code screens. A tap on the button always works and takes over from a waiting automatic try.
+const AUTO = { armed: false, ctrl: null, lastEnd: 0, hiddenAt: 0, hiddenDuringPrompt: false };
+const AUTO_QUIET_MS = 2000;
+function armAuto() { AUTO.armed = true; }
+function maybeAutoUnlock() {
+  if (!AUTO.armed || S.session || S.lockMode !== 'unlock' || !enrolledHere()) return;
+  if (AUTO.ctrl || S.lockBusy || document.visibilityState !== 'visible') return;
+  if (Date.now() - AUTO.lastEnd < AUTO_QUIET_MS) return;
+  AUTO.armed = false; // one automatic try per lock event
+  doUnlock({ auto: true });
+}
+async function doUnlock({ auto = false } = {}) {
   if (S.lockBusy) return;
-  S.lockBusy = true; S.lockMsg = ''; render();
-  try { startSession(await Auth.unlock()); }
-  catch (e) {
-    S.lockBusy = false;
-    if (e.code === 'unknown_device') { S.lockMode = 'setup'; S.lockMsg = "This device's Face ID isn't set up for Ours yet, or it was removed. Set it up below."; }
-    else S.lockMsg = e.message;
+  if (auto && AUTO.ctrl) return;
+  if (!auto && AUTO.ctrl) { const c = AUTO.ctrl; AUTO.ctrl = null; c.abort(); } // the tap takes over
+  const ctrl = new AbortController();
+  if (auto) AUTO.ctrl = ctrl; else { S.lockBusy = true; S.lockMsg = ''; }
+  S.lockHint = auto ? 'Looking for Face ID…' : '';
+  render();
+  // If the browser neither shows Face ID nor says no, don't sit on "Looking…": point at the button.
+  if (auto) setTimeout(() => { if (AUTO.ctrl === ctrl && !S.session && S.lockHint === 'Looking for Face ID…') { S.lockHint = 'Tap to unlock with Face ID'; render(); } }, 6000);
+  try {
+    const res = await Auth.unlock({ signal: ctrl.signal });
+    if (auto && AUTO.ctrl !== ctrl) return;
+    if (auto) AUTO.ctrl = null;
+    S.lockBusy = false; AUTO.lastEnd = Date.now(); S.lockHint = '';
+    startSession(res);
+  } catch (e) {
+    if (auto && AUTO.ctrl !== ctrl) return; // a tap took over; it reports for itself
+    if (auto) AUTO.ctrl = null; else S.lockBusy = false;
+    AUTO.lastEnd = Date.now();
+    if (S.session) return;
+    if (auto && (e.code === 'cancelled' || e.code === 'aborted')) S.lockHint = 'Tap to unlock with Face ID'; // e.g. Safari wanted a tap: stay calm
+    else if (e.code === 'unknown_device') { S.lockHint = ''; S.lockMode = 'setup'; S.lockMsg = "This device's Face ID isn't set up for Ours yet, or it was removed. Set it up below."; }
+    else { S.lockHint = auto ? 'Tap to unlock with Face ID' : ''; S.lockMsg = e.message; }
     render();
   }
 }
@@ -716,7 +745,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=13', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=14', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -1056,7 +1085,7 @@ function lockedView() {
   if (S.lockMode === 'unlock') return `<div class="locked page" data-lock="unlock">
     ${head}
     <h2>Ours is locked.</h2>
-    <p>Unlock with Face ID to open our numbers.</p>
+    <p class="lock-sub">${esc(S.lockHint || 'Unlock with Face ID to open our numbers.')}</p>
     <button type="button" class="btn lock-btn" data-unlock ${busy ? 'disabled' : ''}>${FACE}<span>${busy ? 'Checking…' : 'Unlock with Face ID'}</span></button>
     <p class="lock-fine">If Face ID fails, your phone will offer your passcode.</p>
     ${msg}
@@ -1232,7 +1261,7 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('click', (e) => {
   const t = e.target;
   if (t.closest('[data-unlock]')) { doUnlock(); return; }
-  const lm = t.closest('[data-lock-mode]'); if (lm) { S.lockMode = lm.dataset.lockMode; S.lockMsg = ''; render(); const f = $('#enroll-name') || $('#backup-code'); if (f) f.focus(); return; }
+  const lm = t.closest('[data-lock-mode]'); if (lm) { if (AUTO.ctrl) { const c = AUTO.ctrl; AUTO.ctrl = null; AUTO.lastEnd = Date.now(); c.abort(); } S.lockMode = lm.dataset.lockMode; S.lockMsg = ''; render(); const f = $('#enroll-name') || $('#backup-code'); if (f) f.focus(); return; }
   if (t.closest('[data-lock-now]')) { lockNow(''); return; }
   if (t.closest('[data-codes-copy]')) { copyCodes(); return; }
   if (t.closest('[data-codes-download]')) { downloadCodes(); return; }
@@ -1292,14 +1321,27 @@ function checkAway() {
   S.hiddenAt = 0;
   if (S.data && Date.now() - (S.lastLoad || 0) > 5 * 60e3) { S.lastLoad = Date.now(); load(); }
 }
+// Coming back into view while locked (or locking now because we were away 5+ minutes) earns one automatic Face ID try.
+// A hide that happened while a prompt was up (the system sheet itself) doesn't count, and neither does one right after a cancel.
+function backInView() {
+  const hiddenFor = AUTO.hiddenAt ? Date.now() - AUTO.hiddenAt : 0;
+  const duringPrompt = AUTO.hiddenDuringPrompt;
+  AUTO.hiddenAt = 0; AUTO.hiddenDuringPrompt = false;
+  checkAway();
+  if (!S.session && hiddenFor > 0 && !duringPrompt) { armAuto(); maybeAutoUnlock(); }
+}
+function wentAway() {
+  if (S.session && !S.hiddenAt) S.hiddenAt = Date.now();
+  if (!AUTO.hiddenAt) { AUTO.hiddenAt = Date.now(); AUTO.hiddenDuringPrompt = !!(AUTO.ctrl || S.lockBusy); }
+}
 document.addEventListener('visibilitychange', () => {
   // Blur the numbers while away, so the app switcher's snapshot doesn't show them.
   document.body.classList.toggle('away', document.visibilityState === 'hidden');
-  if (document.visibilityState === 'hidden') { if (S.session && !S.hiddenAt) S.hiddenAt = Date.now(); return; }
-  checkAway();
+  if (document.visibilityState === 'hidden') return wentAway();
+  backInView();
 });
-window.addEventListener('pagehide', () => { if (S.session && !S.hiddenAt) S.hiddenAt = Date.now(); });
-window.addEventListener('pageshow', (e) => { if (e.persisted) checkAway(); });
+window.addEventListener('pagehide', wentAway);
+window.addEventListener('pageshow', (e) => { if (e.persisted) backInView(); });
 window.addEventListener('focus', checkAway);
 
 // ---------------------------------------------------------------- boot
@@ -1309,5 +1351,7 @@ initKey();
 loadFacts();
 render();
 Auth.supported().then((r) => { if (!r.ok && !S.session) { S.lockMsg = r.why; render(); } });
+// First open: try Face ID straight away (Safari may want a tap instead; then the button says so quietly).
+if (!window.__OURS_TEST_SESSION__) { armAuto(); maybeAutoUnlock(); }
 // Test hook for the box's headless checks: a token set before load is still checked by the server like any other.
 if (window.__OURS_TEST_SESSION__) S.testSession = true, startSession({ session: window.__OURS_TEST_SESSION__, expires_at: new Date(Date.now() + 3600e3).toISOString() });

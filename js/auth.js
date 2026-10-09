@@ -1,6 +1,6 @@
 // Face ID / passkey sign-in (WebAuthn) against the ours-auth Edge Function.
 // The session token lives in memory only: every open, and every return after a few minutes away, asks again.
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js?v=13';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js?v=14';
 
 const FN = `${SUPABASE_URL}/functions/v1/ours-auth`;
 const enc = (buf) => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
@@ -32,6 +32,7 @@ export async function supported() {
 
 const friendly = (e) => {
   if (e && e.name === 'NotAllowedError') return new AuthError('cancelled', 'Face ID was cancelled or timed out. Try again.');
+  if (e && e.name === 'AbortError') return new AuthError('aborted', 'Face ID was stopped. Try again.');
   if (e && e.name === 'InvalidStateError') return new AuthError('exists', 'This device is already set up. Use Unlock with Face ID.');
   if (e && e.name === 'SecurityError') return new AuthError('security', 'Face ID only works on the real Ours address.');
   return e instanceof AuthError ? e : new AuthError('webauthn', (e && e.message) || 'Face ID did not work. Try again.');
@@ -58,11 +59,13 @@ export async function enroll(name, { key, invite, session, oldSession } = {}) {
 }
 
 // Face ID / Touch ID check with any Ours passkey on this device (discoverable credential).
-export async function unlock() {
+// signal: lets a tap on the button take over from an automatic attempt that is still waiting.
+export async function unlock({ signal } = {}) {
   const { challengeId, options: o } = await call('auth-options');
+  if (signal && signal.aborted) throw new AuthError('aborted', 'Face ID was stopped. Try again.');
   let cred;
   try {
-    cred = await navigator.credentials.get({ publicKey: { challenge: dec(o.challenge), rpId: o.rpId, timeout: o.timeout, userVerification: 'required', allowCredentials: [] } });
+    cred = await navigator.credentials.get({ signal, publicKey: { challenge: dec(o.challenge), rpId: o.rpId, timeout: o.timeout, userVerification: 'required', allowCredentials: [] } });
   } catch (e) { throw friendly(e); }
   const r = cred.response;
   const response = {
