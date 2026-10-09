@@ -1,7 +1,7 @@
 // The demo tour's made-up household. Everything here is fictional: the couple, employers, banks, stores and
 // numbers. Nothing is read from or derived from our real data; it is built in the browser from this file alone,
 // with dates relative to today, in the same shape as a real bank pull so every page runs the same code.
-import { addDays, weekStart } from './logic.js?v=19';
+import { addDays, weekStart } from './logic.js?v=20';
 
 // Wording the pages use where the real app names our own investing account.
 export const DEMO_WORDS = {

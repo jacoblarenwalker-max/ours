@@ -1,6 +1,6 @@
 // Face ID / passkey sign-in (WebAuthn) against the ours-auth Edge Function.
 // The session token lives in memory only: every open, and every return after a few minutes away, asks again.
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js?v=19';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from './config.js?v=20';
 
 const FN = `${SUPABASE_URL}/functions/v1/ours-auth`;
 const enc = (buf) => { const b = new Uint8Array(buf); let s = ''; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };

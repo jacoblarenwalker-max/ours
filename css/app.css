@@ -479,15 +479,17 @@ body.away .main, body.away .top .status { filter: blur(18px); }
 body.is-demo .status { visibility: hidden; }
 
 /* ---------- tithing ---------- */
-.tithe-card .t-big { font-size: clamp(38px, 10.5vw, 50px); margin-top: 14px; }
-.tithe-card .t-pace { font-size: 15px; color: var(--muted); margin-top: 12px; }
-.tithe-card .tithe-list { margin-top: 16px; }
-.tithe-card .tithe-list li { padding: 12px 0; }
-.tithe-card .numbered li::before { content: none; }
-.tithe-card .numbered li { grid-template-columns: 1fr auto; }
-.tithe-card .numbered .v { grid-column: 1; font-size: 17px; }
-.tithe-card .numbered .chev { grid-column: 2; }
-.tithe-card .numbered .v small { display: block; margin-top: 2px; line-height: 1.4; }
+.tithe-card { margin: 0; }
+.tithe-big { font-family: var(--display); font-weight: 540; font-size: clamp(38px, 10.5vw, 50px); letter-spacing: -0.035em; line-height: 1; margin: 14px 0 0; font-variation-settings: 'opsz' 72, 'SOFT' 0, 'WONK' 0; font-variant-numeric: lining-nums; }
+.tithe-big-sub { font-family: var(--body); font-size: 17px; font-weight: 450; color: var(--muted); letter-spacing: 0; }
+.tithe-pace { font-size: 15px; color: var(--muted); margin: 12px 0 0; }
+.tithe-list { list-style: none; padding: 0; margin: 16px 0 0; }
+.tithe-list li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 12px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.tithe-list .t { color: var(--muted); font-size: 12px; font-weight: 550; letter-spacing: 0.06em; text-transform: uppercase; }
+.tithe-list .v { grid-column: 1; font-size: 17px; font-weight: 450; }
+.tithe-list .v small { display: block; margin-top: 2px; line-height: 1.4; color: var(--muted); font-size: 14px; }
+.tithe-list .chev { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: var(--faint); }
+.tithe-list li:hover .chev { color: var(--text); }
 .tithe-note { font-size: 12.5px; line-height: 1.5; margin: 6px 0 0; }
 .tithe-tag { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 0 5px; border-radius: 3px; vertical-align: 2px; font-family: var(--body); line-height: 16px; white-space: nowrap; }
 .tithe-tag.paid { color: var(--up); border: 1px solid rgba(58, 122, 94, 0.45); }

@@ -1,12 +1,12 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=19';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=20';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=19';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=19';
-import * as Auth from './auth.js?v=19';
-import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=19';
-import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=19';
+} from './logic.js?v=20';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=20';
+import * as Auth from './auth.js?v=20';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=20';
+import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=20';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -782,7 +782,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=19', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=20', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -1326,16 +1326,16 @@ function titheCard() {
   const T = titheT(); if (!T || !T.cur) return '';
   const c = T.cur, l = T.last;
   const row = (sheet, t, v, small) => `<li class="tap" role="button" tabindex="0" data-sheet="${sheet}"><span class="t">${t}</span><span class="v">${v}${small ? ` <small>${small}</small>` : ''}</span>${CHEV}</li>`;
-  const big = T.toPay > 0.004 ? `${m2(T.toPay)} <span class="t-big-sub">to pay now</span>` : T.pool > 0.004 ? `${m2(T.pool)} <span class="t-big-sub">paid ahead</span>` : `${m0(0)} <span class="t-big-sub">to pay. All paid up.</span>`;
+  const big = T.toPay > 0.004 ? `${m2(T.toPay)} <span class="tithe-big-sub">to pay now</span>` : T.pool > 0.004 ? `${m2(T.pool)} <span class="tithe-big-sub">paid ahead</span>` : `${m0(0)} <span class="tithe-big-sub">to pay. All paid up.</span>`;
   const lines = [];
   if (l) lines.push(row(`tithe|${l.ws}`, `Last week · ${weekLabel(l.ws)}`, l.due < 0.005 ? 'Nothing due' : m2(l.due), `${l.due < 0.005 ? 'No income counted' : `${tithePct(T)} of ${m2(l.income)} · ${titheStatus(l).toLowerCase()}`}`));
   if (T.carried > 0.004) lines.push(row('tithe-all', 'Carried over from before', m2(T.carried), 'unpaid from earlier weeks'));
   lines.push(row(`tithe|${c.ws}`, `This week so far · ${shortDate(c.ws)} to today`, m2(c.due), `${tithePct(T)} of ${m2(c.income)} coming in${c.pending > 0 ? `, ${m2(c.pending)} pending` : ''}${c.paid > 0.004 ? ` · ${m2(c.paid)} already paid toward it` : ''}`));
   return `<section class="section"><div class="tithe-card" data-tithe>
     <div class="target-top"><span class="label">Tithing this week · ${tithePct(T)}</span><button type="button" class="linkish target-edit" data-tithe-settings>Settings</button></div>
-    <p class="t-big">${big}</p>
-    <p class="t-pace">${T.toPay > 0.004 ? `For the weeks that are over. This week's ${m2(c.due)} so far joins it on Monday.` : 'Weeks that are over are covered. This week\'s is added on Monday.'}</p>
-    <ol class="numbered tithe-list">${lines.join('')}</ol>
+    <p class="tithe-big">${big}</p>
+    <p class="tithe-pace">${T.toPay > 0.004 ? `For the weeks that are over. This week's ${m2(c.due)} so far joins it on Monday.` : 'Weeks that are over are covered. This week\'s is added on Monday.'}</p>
+    <ul class="tithe-list">${lines.join('')}</ul>
     <p class="faint tithe-note">Gifts we give still count as Giving in our spending and in the weekly target, as before. This card only compares them with what we owe, so nothing is counted twice.</p>
     <div class="btns" style="margin-top:14px">${T.toPay > 0.004 ? `<button type="button" class="btn small" data-tithe-markpaid>Mark ${m2(T.toPay)} as paid</button>` : ''}<button type="button" class="btn ghost small" data-sheet="tithe-all">Week by week</button></div>
   </div></section>`;
