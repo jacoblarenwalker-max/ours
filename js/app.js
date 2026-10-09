@@ -1,12 +1,12 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=17';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=18';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=17';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=17';
-import * as Auth from './auth.js?v=17';
-import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=17';
-import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=17';
+} from './logic.js?v=18';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=18';
+import * as Auth from './auth.js?v=18';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=18';
+import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=18';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -782,7 +782,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=17', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=18', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');

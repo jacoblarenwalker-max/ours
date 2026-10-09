@@ -7,7 +7,7 @@
 // What was paid: purchases already sorted into Giving (so a payment is seen in spending too, as before), plus any
 // payments marked by hand. Adjustments (+/-) change what a week owes. Payments are applied to the oldest unpaid
 // week first, so paying a little more or less one week carries over and evens out.
-import { summarize, weekStart, addDays } from './logic.js?v=17';
+import { summarize, weekStart, addDays } from './logic.js?v=18';
 
 export const DEFAULT_PCT = 10;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -36,8 +36,7 @@ export function computeTithing({ rows, today, coverageFrom, settings, entries = 
     const giveRows = s.items.filter((r) => r.cat === 'giving');
     const adjusts = entries.filter((e) => e.week === ws && e.kind === 'adjust');
     const manuals = entries.filter((e) => e.week === ws && e.kind === 'paid');
-    const bySrc = new Map(); for (const r of counted) bySrc.set(r.key, (bySrc.get(r.key) || 0) + r.amount);
-    const base = r2(sum([...bySrc.values()], (v) => r2(v * cfg.pct / 100)));   // sum of each source's share, so the sheet adds up to the cent
+    const base = r2(income * cfg.pct / 100);   // the percent of the week's total; each source's share below is rounded on its own, so they can differ by a cent
     const adj = r2(sum(adjusts, (e) => Number(e.amount)));
     weeks.push({
       ws, we, current: ws === thisWs, income, counted, skipped, incomeAll: r2(sum(s.incomeRows, (r) => r.amount)),

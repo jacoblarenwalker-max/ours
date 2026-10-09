@@ -1,6 +1,6 @@
 // The Plan page's analysis. Pure functions over the live snapshot (already classified rows) plus the
 // public, sourced facts in data/facts.json. Nothing household-specific is hard-coded here.
-import { counts, shortDate } from './logic.js?v=17';
+import { counts, shortDate } from './logic.js?v=18';
 
 const sum = (a, f = (x) => x) => a.reduce((t, x) => t + f(x), 0);
 const ym = (d) => d.slice(0, 7);
