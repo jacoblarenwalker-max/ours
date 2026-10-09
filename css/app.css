@@ -474,6 +474,6 @@ body.away .main, body.away .top .status { filter: blur(18px); }
 .switch[aria-checked='true'] { background: var(--green); border-color: #3a7a5e; }
 .switch[aria-checked='true'] span { transform: translateX(22px); background: var(--text); }
 .tour-link-row { margin-top: 12px; padding: 10px 12px; border-radius: var(--r-sm, 6px); background: #0f0e0b; border: 1px solid var(--line); overflow-x: auto; }
-.tour-link-row code { font-size: 13.5px; color: var(--text); white-space: nowrap; }
+.tour-link-row code { font-size: 13.5px; color: var(--text); white-space: normal; word-break: break-all; }
 .tour-card a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 body.is-demo .status { visibility: hidden; }
