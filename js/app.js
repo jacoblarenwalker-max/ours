@@ -1,13 +1,13 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=22';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=23';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=22';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=22';
-import * as Auth from './auth.js?v=22';
-import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=22';
-import { monthReport, yearReport, reportMonths, lastFullMonth, monthLabel } from './reports.js?v=22';
-import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=22';
+} from './logic.js?v=23';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=23';
+import * as Auth from './auth.js?v=23';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=23';
+import { monthReport, yearReport, reportMonths, lastFullMonth, monthLabel } from './reports.js?v=23';
+import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=23';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -93,9 +93,10 @@ function writeHash(replace = false) {
 function initKey() {
   const { k, p, tour } = readHash();
   S.wantTour = tour && !k;
-  // The link key only sets up Face ID. Hold it until setup succeeds, and take it out of the address bar.
-  if (k) { S.linkKey = k; try { localStorage.setItem(KEYSTORE, k); } catch {} }
-  else { try { S.linkKey = localStorage.getItem(KEYSTORE); } catch {} }
+  // v23: the old private link no longer sets up devices (one-time setup codes only). An old #k= link just opens
+  // the setup screen; the key is never stored, and any copy older versions saved is wiped.
+  S.linkKey = k ? true : null;
+  try { localStorage.removeItem(KEYSTORE); } catch {}
   if (p && PAGES.some(([id]) => id === p)) S.page = p;
   writeHash(true);
   try { localStorage.removeItem(CACHE); } catch {} // older versions kept a plain copy of the data here
@@ -228,8 +229,8 @@ async function doEnroll(form) {
   const name = form.name.value.trim().replace(/\s+/g, ' ');
   if (!name) { S.lockMsg = `Give this device a name, like ${exampleDevice()}.`; return render(); }
   const typed = form.code ? parseSetupCode(form.code.value) : {};
-  const secret = typed.key || typed.invite ? typed : { key: S.linkKey };
-  if (!secret.key && !secret.invite) { S.lockMsg = 'Open Ours from our private link, or type a setup code from a device that is already unlocked.'; return render(); }
+  const secret = typed.invite ? typed : {};
+  if (!secret.invite) { S.lockMsg = 'Type the setup code from a device that is already unlocked (Worth, then Devices, then Add a device). It looks like ABCD-2345.'; return render(); }
   S.lockBusy = true; S.lockMsg = ''; S.draftDevice = name; render();
   try {
     const res = await Auth.enroll(name, secret);
@@ -785,7 +786,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=22', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=23', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -1160,14 +1161,14 @@ function lockedView() {
     ${msg}
     <p class="lock-alt"><button type="button" class="linkish" data-lock-mode="unlock">Back to Face ID</button></p>
   </div>`;
-  const needCode = !S.linkKey || S.needCode;
+  const needCode = true; // setup codes only (v23)
   return `<div class="locked page" data-lock="setup">
     ${head}
     <h2>Set up Face ID</h2>
     <p>Once on each phone or computer. After this, Ours opens only with Face ID, Touch ID or Windows Hello.</p>
     <form id="enroll" class="form" autocomplete="off">
       <div class="field"><label for="enroll-name">Name this device</label><input id="enroll-name" name="name" maxlength="40" required autocomplete="off" placeholder="${esc(exampleDevice())}" value="${esc(S.draftDevice || '')}"></div>
-      ${needCode ? `<div class="field"><label for="enroll-code">Setup code or our private link</label><input id="enroll-code" name="code" required autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-2345"><p class="faint field-hint">Get a code on a device that is already unlocked: Worth, then Devices, then Add a device.</p></div>` : ''}
+      ${needCode ? `<div class="field"><label for="enroll-code">Setup code</label><input id="enroll-code" name="code" required autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-2345"><p class="faint field-hint">Get a code on a device that is already unlocked: Worth, then Devices, then Add a device.</p></div>` : ''}
       <button class="btn lock-btn" type="submit" ${busy ? 'disabled' : ''}>${FACE}<span>${busy ? 'Setting up…' : 'Set up Face ID'}</span></button>
     </form>
     ${msg}
@@ -1778,6 +1779,8 @@ render();
 checkTour();
 Auth.supported().then((r) => { if (!r.ok && !S.session) { S.lockMsg = r.why; render(); } });
 // First open: try Face ID straight away (Safari may want a tap instead; then the button says so quietly).
-if (!window.__OURS_TEST_SESSION__) { armAuto(); maybeAutoUnlock(); }
+// Box test hook: only honoured on a local test server, never on the real site.
+const TEST_SESSION = /^(127\.0\.0\.1|localhost)$/.test(location.hostname) ? window.__OURS_TEST_SESSION__ : null;
+if (!TEST_SESSION) { armAuto(); maybeAutoUnlock(); }
 // Test hook for the box's headless checks: a token set before load is still checked by the server like any other.
-if (window.__OURS_TEST_SESSION__) S.testSession = true, startSession({ session: window.__OURS_TEST_SESSION__, expires_at: new Date(Date.now() + 3600e3).toISOString() });
+if (TEST_SESSION) S.testSession = true, startSession({ session: TEST_SESSION, expires_at: new Date(Date.now() + 3600e3).toISOString() });

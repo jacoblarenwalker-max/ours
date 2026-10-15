@@ -2,8 +2,8 @@
 // and the box scripts that feed the emails (sync/month-summary.mjs, sync/year-summary.mjs). Same rules as everywhere
 // else: transfers and card payments are not spending, investing is not spending, tithing comes from tithe.js.
 // The returned objects hold no balances, account numbers or net worth, so they are safe to put in an email.
-import { CATS, summarize, weekStart, addDays, counts, weekLabel, shortDate } from './logic.js?v=22';
-import { computeTithing, titheSettings } from './tithe.js?v=22';
+import { CATS, summarize, weekStart, addDays, counts, weekLabel, shortDate } from './logic.js?v=23';
+import { computeTithing, titheSettings } from './tithe.js?v=23';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const sum = (a, f = (x) => x) => a.reduce((t, x) => t + f(x), 0);
@@ -115,7 +115,8 @@ export function monthReport(ctx, m, { words = { invest: 'into Bitcoin' } } = {})
   };
 }
 
-export function yearReport(ctx, year, { ytd = false, words = { invest: 'into Bitcoin' } } = {}) {
+// anon: no merchant or person names anywhere in the text (used for emails).
+export function yearReport(ctx, year, { ytd = false, words = { invest: 'into Bitcoin' }, anon = false } = {}) {
   const { rows, coverageFrom, today } = ctx;
   const months = reportMonths(coverageFrom, today).filter((x) => x.month.startsWith(`${year}-`) && x.done);
   const ms = months.map((x) => {
@@ -150,17 +151,17 @@ export function yearReport(ctx, year, { ytd = false, words = { invest: 'into Bit
   const avgKept = totals.kept / n;
   const take = [];
   const big1 = oneTime[0];
-  if (big1) take.push(`Leaving out ${oneTime.length === 1 ? `the one-time ${$0(big1.amount)} ${big1.label} in ${monthShort(ymOf(big1.date))}` : `${oneTime.length} one-time items over $1,500 (${$0(sum(oneTime, (r) => r.amount))})`}, we ${keptUsual >= 0 ? `kept about ${$0(keptUsual / n)} a month` : `ran about ${$0(-keptUsual / n)} a month short`}.${keptUsual >= 0 ? ' Keeping that going is the main thing.' : ''}`);
+  if (big1) take.push(`Leaving out ${oneTime.length === 1 ? `the one-time ${$0(big1.amount)} ${anon ? 'item' : big1.label} in ${monthShort(ymOf(big1.date))}` : `${oneTime.length} one-time items over $1,500 (${$0(sum(oneTime, (r) => r.amount))})`}, we ${keptUsual >= 0 ? `kept about ${$0(keptUsual / n)} a month` : `ran about ${$0(-keptUsual / n)} a month short`}.${keptUsual >= 0 ? ' Keeping that going is the main thing.' : ''}`);
   else take.push(avgKept > 0 ? `We kept about ${$0(avgKept)} a month on average. Keeping that going is the main thing.` : `More went out than came in, about ${$0(-avgKept)} a month. Next year, aim for months that at least break even.`);
   const usualBy = { ...s.byCat }; for (const r of s.items) if (r.spend >= 1500) usualBy[r.cat] -= r.spend;
   const usualTot = sum(Object.values(usualBy)); const uc = Object.entries(usualBy).filter(([k]) => k !== 'giving').sort((a, b) => b[1] - a[1])[0];
-  if (uc && usualTot > 0) take.push(`${oneTime.length ? 'Without one-time items, ' : ''}${CATS[uc[0]].label.toLowerCase()} was our biggest everyday category at ${Math.round((uc[1] / usualTot) * 100)}% of spending (${$0(uc[1])}${(() => { const mm = {}; for (const r of s.items) if (r.cat === uc[0] && r.spend < 1500) mm[r.label] = (mm[r.label] || 0) + r.spend; const t = Object.entries(mm).sort((a, b) => b[1] - a[1])[0]; return t && t[1] > uc[1] * 0.4 ? `, mostly ${t[0]}` : ''; })()}).${uc[0] === 'eating_out' || uc[0] === 'shopping' ? ' An easy place to start if we want more room.' : ''}`.replace(/^./, (c) => c.toUpperCase()));
+  if (uc && usualTot > 0) take.push(`${oneTime.length ? 'Without one-time items, ' : ''}${CATS[uc[0]].label.toLowerCase()} was our biggest everyday category at ${Math.round((uc[1] / usualTot) * 100)}% of spending (${$0(uc[1])}${(() => { const mm = {}; for (const r of s.items) if (r.cat === uc[0] && r.spend < 1500) mm[r.label] = (mm[r.label] || 0) + r.spend; const t = Object.entries(mm).sort((a, b) => b[1] - a[1])[0]; return !anon && t && t[1] > uc[1] * 0.4 ? `, mostly ${t[0]}` : ''; })()}).${uc[0] === 'eating_out' || uc[0] === 'shopping' ? ' An easy place to start if we want more room.' : ''}`.replace(/^./, (c) => c.toUpperCase()));
   if (subs.length) take.push(`Steady monthly charges came to ${$0(subsTotal)} across ${subs.length} place${subs.length === 1 ? '' : 's'}. Worth a once-a-year look at which ones we still use.`);
   if (tithe.owed_at_end > 1) take.push(`Tithing: ${$0(tithe.owed_at_end)} still to pay at the end of ${monthShort(ms[ms.length - 1].month)}.`);
   const label = ytd ? `${year} so far` : String(year);
   return {
     kind: 'year', year, ytd, label, from, to, cover_note: coverNote, months_covered: ms.map((x) => x.month),
-    headline: `${label}: ${$0(totals.income)} came in and ${$0(totals.spending)} went to spending${totals.kept >= 0 ? `, so we kept ${$0(totals.kept)}` : `. That is ${$0(-totals.kept)} more than came in`}.${big1 ? ` That includes a one-time ${$0(big1.amount)} ${big1.label}.` : ''}`,
+    headline: `${label}: ${$0(totals.income)} came in and ${$0(totals.spending)} went to spending${totals.kept >= 0 ? `, so we kept ${$0(totals.kept)}` : `. That is ${$0(-totals.kept)} more than came in`}.${big1 ? ` That includes a one-time ${$0(big1.amount)} ${anon ? 'item' : big1.label}.` : ''}`,
     one_time: oneTime,
     totals: { ...totals, invest_words: words.invest }, tithing: tithe,
     months: ms.map(({ s: _s, ...x }) => x), top_categories: cats, biggest,
