@@ -1,12 +1,13 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=21';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=22';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=21';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=21';
-import * as Auth from './auth.js?v=21';
-import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=21';
-import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=21';
+} from './logic.js?v=22';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=22';
+import * as Auth from './auth.js?v=22';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=22';
+import { monthReport, yearReport, reportMonths, lastFullMonth, monthLabel } from './reports.js?v=22';
+import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=22';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -351,7 +352,7 @@ function render() {
 }
 function go(page) {
   if (page === S.page) return;
-  S.page = page; writeHash(); render(); window.scrollTo({ top: 0 });
+  S.page = page; S.report = null; writeHash(); render(); window.scrollTo({ top: 0 });
 }
 
 // ---------------------------------------------------------------- shared pieces
@@ -736,8 +737,10 @@ function activityView() {
 
 // ---------------------------------------------------------------- History
 function historyView() {
+  if (S.report && snap()) return reportView();
   let html = '<h2 class="page-title">Week by week.</h2><p class="page-sub">Monday to Sunday, Mountain time.</p>';
   if (!snap()) return html + '<p class="empty">History starts after the first bank pull.</p>';
+  html += reportsEntry();
   const t = today(); const from = snap().coverage.from;
   let ws = weekStart(t); const weeks = [];
   while (ws >= from) { weeks.push(summarize(S.rows, ws, addDays(ws, 6))); ws = addDays(ws, -7); }
@@ -782,7 +785,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=21', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=22', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -1473,6 +1476,82 @@ function titheTiles() {
     <p class="note">${titheSentence(T, m2)} Gifts are counted in spending as Giving, as before.</p></section>`;
 }
 
+// ---------------------------------------------------------------- reports
+// Monthly and yearly reports, the same numbers as the emails (reports.js), plus a little more that only shows in here.
+function reportCtx() { return { rows: S.rows, coverageFrom: snap().coverage.from, today: today(), settings: S.data.settings, tithing: S.data.tithing || [] }; }
+const repWords = () => ({ invest: W().invInto.replace(/\.\s*Not spending\.?$/, '') });
+function reportsEntry() {
+  const t = today(); const lm = lastFullMonth(t); const y = Number(t.slice(0, 4));
+  const ms = reportMonths(snap().coverage.from, t);
+  if (!ms.some((m) => m.month === lm)) return '';
+  const yr = ms.some((m) => m.month.startsWith(`${y}-`) && m.done) ? { y, ytd: true, label: `${y} so far` } : { y: y - 1, ytd: false, label: String(y - 1) };
+  return `<section class="rep-entry"><p class="kicker">Reports</p><div class="rep-entry-row">
+    <button type="button" class="rep-pill" data-report="month|${lm}"><span class="t">Monthly</span><span class="v">${monthLabel(lm)}</span>${CHEV}</button>
+    <button type="button" class="rep-pill" data-report="year|${yr.y}|${yr.ytd ? 1 : 0}"><span class="t">Yearly</span><span class="v">${yr.label}</span>${CHEV}</button>
+  </div></section>`;
+}
+function reportView() {
+  const R = S.report; const ctx = reportCtx(); const t = today();
+  const ms = reportMonths(ctx.coverageFrom, t).slice().reverse();
+  const years = [...new Set(ms.map((m) => Number(m.month.slice(0, 4))))];
+  const seg = `<div class="seg" role="group" aria-label="Report"><button type="button" data-report="month|${R.kind === 'month' ? R.month : lastFullMonth(t)}" aria-pressed="${R.kind === 'month'}">Monthly</button><button type="button" data-report="year|${R.kind === 'year' ? R.year : years[0]}|${R.kind === 'year' ? (R.ytd ? 1 : 0) : (years[0] === Number(t.slice(0, 4)) ? 1 : 0)}" aria-pressed="${R.kind === 'year'}">Yearly</button></div>`;
+  const picker = R.kind === 'month'
+    ? `<label class="rep-pick"><span class="sr">Month</span><select id="report-month">${ms.map((m) => `<option value="${m.month}" ${m.month === R.month ? 'selected' : ''}>${monthLabel(m.month)}${m.done ? '' : ' (so far)'}${m.partialStart ? ' (partial)' : ''}</option>`).join('')}</select></label>`
+    : `<label class="rep-pick"><span class="sr">Year</span><select id="report-year">${years.map((y) => `<option value="${y}" ${y === R.year ? 'selected' : ''}>${y === Number(t.slice(0, 4)) ? `${y} so far` : y}</option>`).join('')}</select></label>`;
+  const head = `<button type="button" class="linkish see rep-back" data-report-close>← Week by week</button><h2 class="page-title">${R.kind === 'month' ? 'The month.' : 'The year.'}</h2>${seg}${picker}`;
+  return head + (R.kind === 'month' ? monthReportHtml(monthReport(ctx, R.month, { words: repWords() })) : yearReportHtml(yearReport(ctx, R.year, { ytd: R.ytd, words: repWords() })));
+}
+const repTile = (label, value, note, cls = '') => `<div class="tile"><div class="label">${label}</div><div class="num ${cls}">${value}</div><div class="tile-note">${note}</div></div>`;
+const repBar = (p, cls = '') => `<div class="rep-bar ${cls}"><span style="width:${Math.max(2, Math.min(100, p))}%"></span></div>`;
+function repTithe(t, from) {
+  if (t.not_counted) return `<p class="muted">Tithing is counted from ${shortDate(t.counted_from)}, as set in Settings.</p>`;
+  return `<div class="tiles three">${repTile('Due', m2(t.due), `${t.pct}% of ${m0(t.income_counted)}`)}${repTile('Paid', m2(t.paid), t.paid_marked ? `incl. ${m2(t.paid_marked)} marked` : 'in Giving', 'up')}${repTile(t.owed_at_end > 0.5 ? 'Still owed' : 'At the end', t.owed_at_end > 0.5 ? m2(t.owed_at_end) : 'Paid up', t.ahead_at_end > 0.5 ? `${m2(t.ahead_at_end)} ahead` : 'through the last day', t.owed_at_end > 0.5 ? 'warn' : 'up')}</div>
+    ${daysBetween(from, t.from) > 7 ? `<p class="note">Counted from ${shortDate(t.from)}, when we started tracking tithing.</p>` : ''}`;
+}
+function monthReportHtml(M) {
+  const tg = M.target;
+  const maxCat = Math.max(1, ...M.top_categories.map((c) => c.amount));
+  const w = worth(snap(), S.data.items || []);
+  return `<p class="page-sub">${esc(M.label)}${M.partial_start ? `, from ${shortDate(M.from)} when our data starts` : ''}${M.complete ? '' : ', so far'}.</p>
+  <section class="section"><h3 class="rep-headline">${esc(M.headline)}</h3>
+    <div class="rep-card"><p class="label">Spent in ${esc(M.label.replace(/ \d{4}$/, ''))}</p><p class="rep-big">${m0(M.spending)}</p>
+      ${tg ? `${repBar((M.spending / tg.monthly) * 100, tg.state)}<div class="t-meta"><span class="${tg.state === 'over' ? 'down' : 'up'}">${m0(tg.diff)} ${tg.state}</span><span>of ${m0(tg.monthly)} target</span></div>` : ''}
+      <p class="note">${esc([M.spending_note, M.prior ? `${M.prior.label.replace(/ \d{4}$/, '')}${M.prior.partial ? ' (partial)' : ''} was ${m0(M.prior.spending)}.` : '', tg ? `Target is our ${tg.source}.` : ''].filter(Boolean).join(' '))}</p></div>
+  </section>
+  <section class="section"><div class="tiles three">${repTile('Came in', m0(M.income), 'income', 'up')}${repTile(M.kept >= 0 ? 'Kept' : 'Short', m0(Math.abs(M.kept)), M.kept >= 0 ? 'after spending + investing' : 'more out than in', M.kept >= 0 ? 'up' : 'down')}${repTile('Invested', m0(M.investing), esc(M.invest_words))}</div>
+    <p class="note">Only in the app: net worth today is ${m0(w.left)}. We don't keep month-end balances yet, so the change over the month can't be shown honestly.</p></section>
+  <section class="section"><p class="kicker">Tithing this month</p>${repTithe(M.tithing, M.from)}</section>
+  ${M.top_categories.length ? `<section class="section"><p class="kicker">Where it went${M.prior ? ` · vs ${M.prior.label.replace(/ \d{4}$/, '')}` : ''}</p><ul class="rep-cats">${M.top_categories.map((c) => `<li><div class="rep-row"><span>${esc(c.name)}${c.change === null ? '' : ` <small class="${c.change > 0.5 ? 'down' : 'up'}">${c.change > 0.5 ? '+' : c.change < -0.5 ? '−' : '±'}${m0(Math.abs(c.change))}</small>`}</span><b>${m0(c.amount)}</b></div>${repBar((c.amount / maxCat) * 100, 'cat')}</li>`).join('')}</ul></section>` : ''}
+  ${M.weeks.length ? `<section class="section"><p class="kicker">Weeks vs ${m0(tg ? tg.weekly : 0)} target</p><div class="rep-weeks">${M.weeks.map((x) => `<button type="button" class="rep-wk ${x.state || ''}" data-sheet="spent|${x.from}|${x.to}|Week of ${esc(x.label)}|cat"><span>${esc(x.label)}</span><b>${m0(x.spend)}</b><i>${x.state || ''}</i></button>`).join('')}</div></section>` : ''}
+  ${M.biggest.length ? `<section class="section"><p class="kicker">Biggest purchases</p><ul class="rep-list">${M.biggest.map((b) => `<li><span>${esc(b.label)}<small>${shortDate(b.date)} · ${esc(b.category)}${b.pending ? ' · pending' : ''}</small></span><b>${m2(b.amount)}</b></li>`).join('')}</ul></section>` : ''}
+  ${M.recurring.changed.length || M.recurring.new.length ? `<section class="section"><p class="kicker">Regular charges</p><ul class="rep-list">${M.recurring.changed.map((r) => `<li><span>${esc(r.label)}<small>amount changed</small></span><b>${m2(r.from)} → ${m2(r.to)}</b></li>`).join('')}${M.recurring.new.map((r) => `<li><span>${esc(r.label)}<small>looks new: last month and this month</small></span><b>${m2(r.amount)}</b></li>`).join('')}</ul></section>` : ''}
+  <section class="section"><div class="rep-next"><p class="kicker">Next month</p><p>${esc(M.next_step)}</p></div></section>`;
+}
+function yearReportHtml(Y) {
+  if (Y.empty) return `<p class="empty">${esc(Y.headline)}</p>`;
+  const tt = Y.totals;
+  const cap = Math.max(1, ...Y.months.map((m) => Math.max(m.income, m.spending > 3 * m.income ? 0 : m.spending))) * 1.15;
+  const maxCat = Math.max(1, ...Y.top_categories.map((c) => c.amount));
+  const oneTime = (Y.one_time || []).reduce((a, r) => a + r.amount, 0);
+  return `<p class="page-sub">${esc(Y.cover_note)}</p>
+  <section class="section"><h3 class="rep-headline">${esc(Y.headline)}</h3>
+    <div class="tiles three">${repTile('Came in', m0(tt.income), 'income', 'up')}${repTile('Spent', m0(tt.spending), oneTime ? `incl. ${m0(oneTime)} one-time` : 'purchases')}${repTile(tt.kept >= 0 ? 'Kept' : 'Short', m0(Math.abs(tt.kept)), tt.kept >= 0 ? 'after spending + investing' : 'more out than in', tt.kept >= 0 ? 'up' : 'down')}</div>
+    <div class="tiles three" style="margin-top:8px">${repTile('Tithing', m2(Y.tithing.paid), Y.tithing.not_counted ? `counted from ${shortDate(Y.tithing.counted_from)}` : `paid of ${m2(Y.tithing.due)} due`, 'up')}${repTile('Invested', m0(tt.investing), esc(tt.invest_words))}${repTile('Steady charges', m0(Y.subscriptions.total), `${Y.subscriptions.places.length} monthly`)}</div>
+    ${daysBetween(Y.from, Y.tithing.from) > 7 && !Y.tithing.not_counted ? `<p class="note">Tithing counted from ${shortDate(Y.tithing.from)}, when we started tracking it.</p>` : ''}</section>
+  <section class="section"><p class="kicker">Month by month</p><p class="note rep-legend"><span class="sw sand"></span>spent <span class="sw green"></span>came in${Y.months.some((m) => m.partial) ? ' · * partial month' : ''}</p>
+    <ul class="rep-months">${Y.months.map((m) => `<li><button type="button" data-report="month|${m.month}"><span class="m">${esc(m.short)}${m.partial ? '*' : ''}</span><span class="bars">${repBar((Math.min(m.spending, cap) / cap) * 100, 'cat')}${repBar((m.income / cap) * 100, 'inc')}</span><span class="vals"><b>${m0(m.spending)}${m.spending > cap ? ' ▸' : ''}</b><b class="up">${m0(m.income)}</b></span>${CHEV}</button></li>`).join('')}</ul></section>
+  <section class="section"><p class="kicker">Where it went</p><ul class="rep-cats">${Y.top_categories.slice(0, 5).map((c) => `<li><div class="rep-row"><span>${esc(c.name)} <small class="faint">${c.share}%</small></span><b>${m0(c.amount)}</b></div>${repBar((c.amount / maxCat) * 100, 'cat')}</li>`).join('')}</ul></section>
+  ${Y.biggest.length ? `<section class="section"><p class="kicker">Largest purchases</p><ul class="rep-list">${Y.biggest.map((b) => `<li><span>${esc(b.label)}<small>${shortDate(b.date)} · ${esc(b.category)}</small></span><b>${m2(b.amount)}</b></li>`).join('')}</ul></section>` : ''}
+  <section class="section"><ul class="rep-list">${Y.best_month ? `<li><span>Best month: ${esc(Y.best_month.label)}<small>kept · spent ${m0(Y.best_month.spending)}</small></span><b class="up">${m0(Y.best_month.kept)}</b></li>` : ''}${Y.toughest_month ? `<li><span>Toughest month: ${esc(Y.toughest_month.label)}<small>${Y.toughest_month.kept < 0 ? 'short' : 'kept'} · spent ${m0(Y.toughest_month.spending)}</small></span><b class="${Y.toughest_month.kept < 0 ? 'down' : ''}">${m0(Y.toughest_month.kept)}</b></li>` : ''}</ul>
+    ${Y.subscriptions.places.length ? `<p class="note">Steady monthly charges: ${Y.subscriptions.places.map((x) => `${esc(x.label)} ${m0(x.total)}`).join(', ')}.</p>` : ''}</section>
+  <section class="section"><div class="rep-next"><p class="kicker">For next year</p>${Y.takeaways.map((x) => `<p>${esc(x)}</p>`).join('')}</div></section>`;
+}
+function openReport(spec) {
+  const [kind, a, b] = spec.split('|');
+  S.report = kind === 'month' ? { kind, month: a } : { kind, year: Number(a), ytd: b === '1' };
+  S.page = 'history'; writeHash(); render(); window.scrollTo({ top: 0 });
+}
+
 // ---------------------------------------------------------------- demo tour
 // A walk through every page with a made-up household (js/demo.js). It runs the same views and drill-downs, but
 // S.data comes from the generator, writes are answered in memory (see rpc), and it never asks Supabase for data.
@@ -1581,6 +1660,8 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-tour-toggle]')) { if (S.session && !S.demo) setTour(!tourIsOn()); return; }
   if (t.closest('[data-tour-copy]')) { copyText(tourLink(), 'Copied. Send it to anyone you want to show.'); return; }
   if (isOpen()) {
+    const rp = t.closest('[data-report]'); if (rp) { openReport(rp.dataset.report); return; }
+    if (t.closest('[data-report-close]')) { S.report = null; render(); window.scrollTo({ top: 0 }); return; }
     const sk = t.closest('[data-tithe-skip]'); if (sk) { titheSkipSource(sk.dataset.titheSkip, true); return; }
     const us = t.closest('[data-tithe-unskip]'); if (us) { titheSkipSource(us.dataset.titheUnskip, false); return; }
     const td = t.closest('[data-tithe-del]'); if (td) { titheDelete(td.dataset.titheDel); return; }
@@ -1628,6 +1709,10 @@ document.addEventListener('click', (e) => {
   const del = t.closest('[data-del]'); if (del) { confirmDelete(del.dataset.del); return; }
   const act = t.closest('[data-act]'); if (act) { S.actFilter = act.dataset.act; S.actLimit = 80; render(); return; }
   if (t.closest('[data-more]')) { S.actLimit += 120; render(); return; }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'report-month') openReport(`month|${e.target.value}`);
+  if (e.target.id === 'report-year') { const y = Number(e.target.value); openReport(`year|${y}|${y === Number(today().slice(0, 4)) ? 1 : 0}`); }
 });
 document.addEventListener('submit', (e) => {
   if (e.target.id === 'item-form') { e.preventDefault(); submitItem(e.target); }

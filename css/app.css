@@ -510,3 +510,55 @@ body.is-demo .status { visibility: hidden; }
    below its edge so no empty band can show under it. */
 .nav-bottom { bottom: 0; margin: 0; }
 .nav-bottom::after { content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 200px; background: rgb(16, 15, 12); pointer-events: none; }
+
+/* ---------- reports (History) ---------- */
+.rep-entry { margin-top: 22px; }
+.rep-entry-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rep-pill { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; text-align: left; background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--green); border-radius: var(--r); padding: 14px 16px; color: var(--text); }
+.rep-pill .t { color: var(--muted); font-size: 12px; font-weight: 550; letter-spacing: 0.06em; text-transform: uppercase; }
+.rep-pill .v { grid-column: 1; font-family: var(--display); font-size: 19px; font-weight: 540; letter-spacing: -0.01em; }
+.rep-pill .chev { grid-column: 2; grid-row: 1 / span 2; align-self: center; width: 14px; height: 14px; color: var(--faint); }
+.rep-pill:hover { border-color: var(--green-line); }
+.rep-back { display: inline-block; margin: 6px 0 14px; color: var(--muted); font-size: 14px; }
+.rep-pick { display: block; margin-top: 12px; }
+.rep-pick select { -webkit-appearance: none; appearance: none; background: var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4' fill='none' stroke='%239c958a' stroke-width='1.8'/%3E%3C/svg%3E") no-repeat right 12px center / 14px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 11px 14px; font-size: 16px; color: var(--text); font-family: inherit; width: 100%; max-width: 320px; }
+.rep-headline { font-family: var(--display); font-weight: 450; font-size: clamp(22px, 6vw, 28px); line-height: 1.25; letter-spacing: -0.01em; margin: 0 0 18px; }
+.rep-card { background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--green); border-radius: var(--r); padding: clamp(20px, 5vw, 28px); }
+.rep-card .label { color: var(--muted); font-size: 12px; font-weight: 550; letter-spacing: 0.06em; text-transform: uppercase; margin: 0; }
+.rep-big { font-family: var(--display); font-weight: 540; font-size: clamp(46px, 13vw, 60px); letter-spacing: -0.035em; line-height: 1; margin: 14px 0 16px; }
+.rep-card .t-meta { margin-top: 10px; }
+.rep-bar { height: 8px; background: var(--line); border-radius: 8px; overflow: hidden; }
+.rep-bar span { display: block; height: 100%; border-radius: 8px; background: var(--green); }
+.rep-bar.over span { background: rgba(196, 122, 98, 0.75); }
+.rep-bar.cat span { background: var(--sand, #d4c6a4); }
+.rep-bar.inc span { background: var(--up); }
+.tile .tile-note { color: var(--muted); font-size: 12.5px; line-height: 1.35; margin-top: 4px; }
+.tile .num.warn { color: var(--warn); }
+.rep-cats, .rep-list, .rep-months { list-style: none; margin: 0; padding: 0; }
+.rep-cats li { padding: 10px 0; }
+.rep-row { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 7px; font-size: 15.5px; }
+.rep-row b, .rep-list b { font-weight: 550; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rep-row small { font-size: 12.5px; margin-left: 4px; }
+.rep-weeks { display: grid; grid-template-columns: repeat(auto-fit, minmax(68px, 1fr)); gap: 6px; }
+.rep-wk { display: grid; gap: 3px; text-align: left; background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--up); border-radius: var(--r-sm); padding: 10px 8px; color: var(--text); }
+.rep-wk.over { border-top-color: var(--down); }
+.rep-wk span { color: var(--muted); font-size: 11.5px; line-height: 1.25; }
+.rep-wk b { font-family: var(--display); font-weight: 540; font-size: 17px; }
+.rep-wk i { font-style: normal; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--up); }
+.rep-wk.over i { color: var(--down); }
+.rep-list li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 15.5px; }
+.rep-list li:first-child { border-top: 0; }
+.rep-list small { display: block; color: var(--muted); font-size: 12.5px; }
+.rep-months li button { display: grid; grid-template-columns: 40px 1fr auto 14px; gap: 10px; align-items: center; width: 100%; background: none; border: 0; border-top: 1px solid var(--line); padding: 11px 0; color: var(--text); text-align: left; }
+.rep-months .bars { display: grid; gap: 4px; }
+.rep-months .bars .rep-bar { height: 6px; }
+.rep-months .vals { display: grid; text-align: right; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.rep-months .vals b { font-weight: 500; color: var(--sand, #d4c6a4); }
+.rep-months .vals b.up { color: var(--up); }
+.rep-months .chev { width: 14px; height: 14px; color: var(--faint); }
+.rep-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin: 0 4px 0 8px; vertical-align: 0; }
+.rep-legend .sw:first-child { margin-left: 0; }
+.rep-legend .sw.sand { background: #d4c6a4; } .rep-legend .sw.green { background: var(--up); }
+.rep-next { background: #16382c; border-radius: var(--r); padding: 18px 20px; }
+.rep-next .kicker { color: #d4c6a4; }
+.rep-next p:not(.kicker) { margin: 8px 0 0; font-size: 16px; line-height: 1.5; }
