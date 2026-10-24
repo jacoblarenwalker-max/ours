@@ -479,7 +479,16 @@ body.away .main, body.away .top .status { filter: blur(18px); }
 body.is-demo .status { visibility: hidden; }
 
 /* ---------- tithing ---------- */
-.tithe-card { margin: 0; }
+.tithe-card { margin: 0; cursor: pointer; }
+.tithe-card .target-top .chev { width: 16px; height: 16px; color: var(--faint); }
+.tithe-card:hover .target-top .chev { color: var(--text); }
+.tithe-sub { font-size: 15px; color: var(--muted); margin: 10px 0 0; }
+.tithe-status { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 16px; }
+.tithe-st { font-weight: 600; }
+.tithe-st.ok { color: var(--up); }
+.tithe-st.owe { color: var(--warn); }
+.tithe-st.muted { color: var(--muted); font-weight: 450; }
+.tithe-extra { color: var(--faint); font-size: 13px; margin-left: 6px; }
 .tithe-big { font-family: var(--display); font-weight: 540; font-size: clamp(38px, 10.5vw, 50px); letter-spacing: -0.035em; line-height: 1; margin: 14px 0 0; font-variation-settings: 'opsz' 72, 'SOFT' 0, 'WONK' 0; font-variant-numeric: lining-nums; }
 .tithe-big-sub { font-family: var(--body); font-size: 17px; font-weight: 450; color: var(--muted); letter-spacing: 0; }
 .tithe-pace { font-size: 15px; color: var(--muted); margin: 12px 0 0; }
