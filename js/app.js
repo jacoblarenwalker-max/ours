@@ -1,13 +1,13 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=24';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=25';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=24';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=24';
-import * as Auth from './auth.js?v=24';
-import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=24';
-import { monthReport, yearReport, reportMonths, lastFullMonth, monthLabel } from './reports.js?v=24';
-import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=24';
+} from './logic.js?v=25';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=25';
+import * as Auth from './auth.js?v=25';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=25';
+import { monthReport, yearReport, reportMonths, lastFullMonth, monthLabel } from './reports.js?v=25';
+import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=25';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -25,10 +25,10 @@ const S = {
 };
 // Wording that names our own investing account. The tour swaps in its made-up equivalents.
 const REAL_WORDS = {
-  invInto: 'into Bitcoin (River). Not spending.', invStory: 'Bitcoin', invBuys: 'Bitcoin buys',
-  invBuysMid: 'Bitcoin buys',
-  invHow: 'Bitcoin buys through River. Counted once, from the bank side. Not spending.',
-  invInside: 'Bitcoin is counted once, inside the River account balance.', holdNote: 'Counted once, as part of the River Bitcoin account balance.',
+  invInto: 'into investing (Bitcoin at River, stocks at Robinhood). Not spending.', invStory: 'investing', invBuys: 'Investing',
+  invBuysMid: 'investing',
+  invHow: 'Money moved into River (Bitcoin) and Robinhood (stocks). Counted once, from the bank side. Not spending.',
+  invInside: 'Investments are counted once, inside the River and Robinhood account balances.', holdNote: 'Counted once, as part of each investing account balance.',
   incomeNote: 'including family Venmo, which may be paybacks',
 };
 const W = () => (S.demo ? DEMO_WORDS : REAL_WORDS);
@@ -786,7 +786,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=24', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=25', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');

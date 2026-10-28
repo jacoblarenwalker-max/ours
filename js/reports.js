@@ -2,8 +2,8 @@
 // and the box scripts that feed the emails (sync/month-summary.mjs, sync/year-summary.mjs). Same rules as everywhere
 // else: transfers and card payments are not spending, investing is not spending, tithing comes from tithe.js.
 // The returned objects hold no balances, account numbers or net worth, so they are safe to put in an email.
-import { CATS, summarize, weekStart, addDays, counts, weekLabel, shortDate } from './logic.js?v=24';
-import { computeTithing, titheSettings } from './tithe.js?v=24';
+import { CATS, summarize, weekStart, addDays, counts, weekLabel, shortDate } from './logic.js?v=25';
+import { computeTithing, titheSettings } from './tithe.js?v=25';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const sum = (a, f = (x) => x) => a.reduce((t, x) => t + f(x), 0);
