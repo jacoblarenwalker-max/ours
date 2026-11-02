@@ -7,7 +7,7 @@
 // What was paid: purchases already sorted into Giving (so a payment is seen in spending too, as before), plus any
 // payments marked by hand. Adjustments (+/-) change what a week owes. Payments are applied to the oldest unpaid
 // week first, so paying a little more or less one week carries over and evens out.
-import { summarize, weekStart, addDays } from './logic.js?v=25';
+import { summarize, weekStart, addDays } from './logic.js?v=26';
 
 export const DEFAULT_PCT = 10;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -45,8 +45,30 @@ export function computeTithing({ rows, today, coverageFrom, settings, entries = 
       giveRows, giving: r2(sum(giveRows, (r) => r.spend)), alloc: 0, paid: 0, owed: 0,
     });
   }
+  // A hand-marked payment and the bank/card payment for it later are the same money. Match each mark to Giving rows
+  // dated from its week to 7 days after it was paid (oldest first). The bank row is the one shown and counted; the
+  // matched part of the mark just keeps that money on the mark's week instead of the oldest unpaid one.
+  const gives = weeks.flatMap((w) => w.giveRows).sort((a, b) => (a.date < b.date ? -1 : 1)).map((r) => ({ r, left: r.spend }));
+  const marks = weeks.flatMap((w) => w.manuals.map((e) => ({ e, w }))).sort((a, b) => ((a.e.paid_on || a.e.week) < (b.e.paid_on || b.e.week) ? -1 : 1));
+  const info = new Map();
+  let matchedTotal = 0;
+  for (const { e, w } of marks) {
+    const end = addDays((e.paid_on && e.paid_on > w.we) ? e.paid_on : w.we, 7);
+    let need = r2(Number(e.amount)); const by = [];
+    for (const g of gives) {
+      if (need < 0.005) break;
+      if (g.left < 0.005 || g.r.date < e.week || g.r.date > end) continue;
+      const take = r2(Math.min(need, g.left)); g.left = r2(g.left - take); need = r2(need - take); by.push({ id: g.r.id, date: g.r.date, label: g.r.label, amount: take });
+    }
+    const matched = r2(Number(e.amount) - need); matchedTotal += matched;
+    info.set(e.id, { matched, extra: need, by, full: need < 0.005 });
+  }
+  for (const w of weeks) {
+    w.manuals = w.manuals.map((e) => ({ ...e, ...info.get(e.id) }));
+    w.manualExtra = r2(sum(w.manuals, (e) => e.extra));          // marked money the bank never showed (cash, for example)
+  }
   // Payments go to the oldest unpaid week first. A hand-marked payment goes to its own week.
-  let pool = sum(weeks, (w) => w.giving) + sum(weeks, (w) => Math.max(0, w.manual - w.due));
+  let pool = sum(weeks, (w) => w.giving) - matchedTotal + sum(weeks, (w) => Math.max(0, w.manual - w.due));
   pool = r2(Math.max(0, pool));
   for (const w of weeks) {
     const need = Math.max(0, r2(w.due - w.manual));
@@ -66,7 +88,7 @@ export function computeTithing({ rows, today, coverageFrom, settings, entries = 
     toPay: owedCompleted,                                                  // what's still to pay for weeks that are over
     withThisWeek: r2(owedCompleted + (cur ? cur.owed : 0)),
     dueTotal: r2(sum(weeks, (w) => w.due)), paidTotal: r2(sum(weeks, (w) => w.paid) + pool),
-    givingTotal: r2(sum(weeks, (w) => w.giving)), incomeTotal: r2(sum(weeks, (w) => w.income)),
+    givingTotal: r2(sum(weeks, (w) => w.giving)), markedExtraTotal: r2(sum(weeks, (w) => w.manualExtra)), incomeTotal: r2(sum(weeks, (w) => w.income)),
   };
 }
 

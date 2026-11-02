@@ -1,13 +1,13 @@
-import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=25';
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, STALE_AFTER_HOURS, BRAND_NAME, SUBTITLE } from './config.js?v=26';
 import {
   TZ, CATS, CAT_KEYS, KINDS, classifyAll, summarize, buildLetter, worth, gaps, weekStart, addDays, daysBetween, vsTarget, targetSentence,
   todayLocal, weekLabel, shortDate, weekdayName, counts,
-} from './logic.js?v=25';
-import { analyze, nextSteps, questions, monthName } from './plan.js?v=25';
-import * as Auth from './auth.js?v=25';
-import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=25';
-import { monthReport, yearReport, reportMonths, lastFullMonth, monthLabel } from './reports.js?v=25';
-import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=25';
+} from './logic.js?v=26';
+import { analyze, nextSteps, questions, monthName } from './plan.js?v=26';
+import * as Auth from './auth.js?v=26';
+import { makeDemo, demoWrite, DEMO_WORDS } from './demo.js?v=26';
+import { monthReport, yearReport, reportMonths, lastFullMonth, monthLabel } from './reports.js?v=26';
+import { computeTithing, titheSettings, titheSentence, DEFAULT_PCT } from './tithe.js?v=26';
 
 // ---------------------------------------------------------------- state
 const CACHE = 'ours.cache.v1';
@@ -786,7 +786,7 @@ function planData() {
 }
 async function loadFacts() {
   try {
-    const r = await fetch('data/facts.json?v=25', { cache: 'no-cache' });
+    const r = await fetch('data/facts.json?v=26', { cache: 'no-cache' });
     if (!r.ok) throw new Error(r.status);
     const f = await r.json();
     if (!f || !f.facts || !f.checked) throw new Error('bad facts');
@@ -1334,14 +1334,23 @@ function titheCard() {
   let status;
   if (owedAll > 0.004) status = `<span class="tithe-st owe">Still to pay: ${m2(owedAll)}</span>`;
   else if (c.due < 0.005) status = `<span class="tithe-st muted">Nothing due yet</span>`;
-  else if (c.giving + c.manual >= c.due - 0.004) status = `<span class="tithe-st ok">Paid</span>`;
+  else if (c.giving + c.manualExtra >= c.due - 0.004) status = `<span class="tithe-st ok">Paid</span>`;
   else status = `<span class="tithe-st ok">Covered</span>${T.pool >= 1 ? ` <span class="tithe-extra">${m0(T.pool)} extra paid</span>` : ''}`;
   return `<section class="section"><div class="tithe-card tap" role="button" tabindex="0" data-tithe data-sheet="tithe|${c.ws}" aria-label="Tithing details">
     <div class="target-top"><span class="label">Tithing</span>${CHEV}</div>
     <p class="tithe-big">${m2(c.due)}</p>
     <p class="tithe-sub">Tithing this week · ${tithePct(T)} of ${m2(c.income)} earned</p>
     <p class="tithe-status">${status}</p>
+    ${titheCardAction(T)}
   </div></section>`;
+}
+// One small action under the status: mark this week paid, or undo the last mark made this week.
+function titheCardAction(T) {
+  const c = T.cur;
+  if (T.withThisWeek > 0.004) return `<div class="tithe-act"><button type="button" class="btn small" data-tithe-mark="${c.ws}">Mark as paid</button></div>`;
+  const lastMark = c.manuals[c.manuals.length - 1];
+  if (lastMark) return `<div class="tithe-act"><span class="faint">${lastMark.full ? 'Marked paid · matched to the bank' : `Marked ${m2(Number(lastMark.amount))} paid`}</span> <button type="button" class="linkish" data-tithe-undo="${esc(lastMark.id)}">Undo</button></div>`;
+  return '';
 }
 function titheLetterRow() {
   const T = titheT(); if (!T || !T.last) return '';
@@ -1364,9 +1373,12 @@ function openTitheSheet(ws) {
   const skipped = groupBy(w.skipped, (r) => r.key, (r) => r.label, (r) => r.amount);
   const skipHtml = skipped.length ? `<div class="inc-group"><div class="inc-head"><span class="n">Left out<small>Not counted for tithing, still counted as income elsewhere</small></span><span class="t faint">${m2(sum(skipped, (g) => g.total))}</span></div>
     <ul class="inc-rows">${skipped.map((g) => line(`${esc(g.label)} <span class="faint">· ${plural(g.rows.length, 'deposit')}</span> <button type="button" class="linkish" data-tithe-unskip="${esc(g.key)}">Count it</button>`, m2(g.total), 'wrap')).join('')}</ul></div>` : '';
-  const entryLine = (e) => line(`${e.kind === 'paid' ? 'Marked paid' : 'Adjustment'}${e.note ? ` · ${esc(e.note)}` : ''} <button type="button" class="linkish" data-tithe-del="${esc(e.id)}">Remove</button>`, e.kind === 'paid' ? m2(Number(e.amount)) : signed(Number(e.amount)), 'wrap');
+  const matchTag = (e) => (e.matched > 0.004 ? ` <span class="tithe-tag paid">${e.full ? 'matched' : `${m2(e.matched)} matched`}</span><small class="faint"> to the bank payment${e.by.length > 1 ? 's' : ''} on ${e.by.map((b) => dayShort(b.date)).join(', ')}, counted once</small>` : '');
+  const entryLine = (e) => e.kind === 'paid'
+    ? line(`Marked paid${e.paid_on ? ` · ${dayShort(e.paid_on)}` : ''}${e.note && e.note !== 'Marked paid' ? ` · ${esc(e.note)}` : ''}${matchTag(e)} <button type="button" class="linkish" data-tithe-del="${esc(e.id)}">Undo</button>`, e.full ? `<s class="faint">${m2(Number(e.amount))}</s>` : m2(e.extra ?? Number(e.amount)), 'wrap')
+    : line(`Adjustment${e.note ? ` · ${esc(e.note)}` : ''} <button type="button" class="linkish" data-tithe-del="${esc(e.id)}">Remove</button>`, signed(Number(e.amount)), 'wrap');
   const paidRows = [...w.giveRows.map((r) => line(`${esc(r.label)} <span class="faint">· ${dayShort(r.date)}${r.acct ? ` · ${esc(r.acct.display)}` : ''}</span>${pend(r)}`, m2(r.spend), 'wrap')), ...w.manuals.map(entryLine)];
-  const paidHtml = group('Gifts given this week', 'Purchases in Giving, plus anything marked paid. They go to the oldest unpaid week first, so they may be paying an earlier week.', m2(w.giving + w.manual), paidRows);
+  const paidHtml = group('Gifts given this week', 'Purchases in Giving, plus anything marked paid. A mark that the bank payment later shows up for is matched and counted once. Payments go to the oldest unpaid week first, so they may be paying an earlier week.', m2(w.giving + w.manualExtra), paidRows);
   const adjHtml = w.adjusts.length ? group('Adjustments', 'Added to or taken off what this week owes', signed(w.adj), w.adjusts.map(entryLine)) : '';
   const sumHtml = group('This week\'s tithing', '', m2(w.due), [
     line(`${tithePct(T)} of ${m2(w.income)} that came in`, m2(w.base)),
@@ -1378,7 +1390,7 @@ function openTitheSheet(ws) {
     total: m2(w.due), totalClass: '',
     note: `${tithePct(T)} of the money that came in: paychecks, interest, cashback and other deposits, the same income as Earned. Transfers between our accounts, card payments and refunds are not income. Pending deposits count and are tagged.`,
     body: sumHtml + (srcHtml || emptyLine('No income counted this week.')) + skipHtml + paidHtml + adjHtml +
-      `<div class="btns tithe-actions">${w.owed > 0.004 ? `<button type="button" class="btn" data-tithe-markpaid="${w.ws}">Mark ${m2(w.owed)} paid</button>` : ''}<button type="button" class="btn ghost" data-tithe-add="${w.ws}">Add a payment or adjustment</button><button type="button" class="btn ghost" data-sheet="tithe-all">Week by week</button><button type="button" class="btn ghost" data-tithe-settings>Settings</button></div>` });
+      `<div class="btns tithe-actions"><button type="button" class="btn" data-tithe-mark="${w.ws}">Mark as paid</button><button type="button" class="btn ghost" data-tithe-add="${w.ws}">Add a payment or adjustment</button><button type="button" class="btn ghost" data-sheet="tithe-all">Week by week</button><button type="button" class="btn ghost" data-tithe-settings>Settings</button></div>` });
 }
 // Every week, newest first, with what is still owed in total.
 function openTitheAll() {
@@ -1439,6 +1451,35 @@ function titheMarkPaid(ws) {
   if (!T.last || T.toPay < 0.005) return;
   const amt = T.toPay, wk = T.last.ws;
   titheAct(() => saveTitheEntry(wk, 'paid', amt, 'Marked paid'), `Marked ${m2(amt)} paid.`);
+}
+// "Mark as paid": amount (this week's due by default), the day it was paid, an optional note.
+function openTitheMark(ws) {
+  const T = titheT(); const w = T && T.weeks.find((x) => x.ws === ws); if (!w) return;
+  const def = w.current ? (w.owed > 0.004 ? w.owed : T.withThisWeek > 0.004 ? T.withThisWeek : w.due) : (w.owed > 0.004 ? w.owed : w.due);
+  const d = today() < w.ws ? w.ws : today();
+  openSheet(`${XBTN}<p class="kicker" style="margin-bottom:4px">Tithing · ${weekLabel(w.ws)}</p><h3>Mark as paid</h3>
+    <p class="faint">For money given that you want counted now. If the bank or card payment to the Church shows up later, it's matched to this and counted once.</p>
+    <form id="tithe-mark-form" class="form" autocomplete="off"><input type="hidden" name="week" value="${w.ws}">
+      <div class="row2"><div class="field"><label for="tm-amt">Dollar amount</label><input id="tm-amt" name="amount" inputmode="decimal" required value="${def > 0.004 ? def.toFixed(2) : ''}" placeholder="25"></div>
+      <div class="field"><label for="tm-date">Paid on</label><input id="tm-date" name="paid_on" type="date" required value="${d}" max="${today()}"></div></div>
+      <div class="field"><label for="tm-note">Note (optional)</label><input id="tm-note" name="note" maxlength="120" placeholder="Paid online at donations.churchofjesuschrist.org"></div>
+      <div class="btns"><button class="btn" type="submit">Mark as paid</button><button type="button" class="btn ghost" data-close>Cancel</button></div>
+    </form>`, () => {});
+}
+function titheMarkSubmit(form) {
+  const amount = Math.round(Number(String(form.amount.value).replace(/[$,\s]/g, '')) * 100) / 100;
+  if (!isFinite(amount) || amount <= 0) return toast('Use a dollar amount more than zero, like 25.');
+  const week = form.week.value, paidOn = form.paid_on.value || today(), note = form.note.value.trim().slice(0, 120);
+  closeSheet();
+  titheAct(async () => {
+    const saved = await rpc('ours_tithe_mark', { p_week: week, p_amount: amount, p_paid_on: paidOn, p_note: note || null });
+    S.data.tithing = [...(S.data.tithing || []), saved];
+    S.lastMark = saved.id;
+  }, null, () => toastUndo(`Marked ${m2(amount)} paid.`, S.lastMark));
+}
+function toastUndo(msg, id) {
+  const t = $('#toast'); t.innerHTML = `${esc(msg)} <button type="button" class="linkish toast-undo" data-tithe-undo="${esc(id)}">Undo</button>`; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 8000);
 }
 function titheDelete(id) {
   const ws = S.titheOpen; const wasSettings = !!document.querySelector('#tithe-settings-form');
@@ -1665,6 +1706,8 @@ document.addEventListener('click', (e) => {
     const sk = t.closest('[data-tithe-skip]'); if (sk) { titheSkipSource(sk.dataset.titheSkip, true); return; }
     const us = t.closest('[data-tithe-unskip]'); if (us) { titheSkipSource(us.dataset.titheUnskip, false); return; }
     const td = t.closest('[data-tithe-del]'); if (td) { titheDelete(td.dataset.titheDel); return; }
+    const tm = t.closest('[data-tithe-mark]'); if (tm) { openTitheMark(tm.dataset.titheMark); return; }
+    const tu = t.closest('[data-tithe-undo]'); if (tu) { $('#toast').classList.remove('show'); const id = tu.dataset.titheUndo; S.lastMark = null; titheAct(async () => { await rpc('ours_tithe_delete', { p_id: id }); S.data.tithing = (S.data.tithing || []).filter((e) => e.id !== id); }, 'Undone.'); return; }
     const mp = t.closest('[data-tithe-markpaid]'); if (mp) { titheMarkPaid(mp.dataset.titheMarkpaid || null); return; }
     const ta = t.closest('[data-tithe-add]'); if (ta) { openTitheSettings(ta.dataset.titheAdd); return; }
     if (t.closest('[data-tithe-settings]')) { openTitheSettings(); return; }
@@ -1725,6 +1768,7 @@ document.addEventListener('submit', (e) => {
     saveTarget(Math.round(n * 100) / 100);
   }
   if (e.target.id === 'tithe-settings-form') { e.preventDefault(); titheSettingsSubmit(e.target); }
+  if (e.target.id === 'tithe-mark-form') { e.preventDefault(); titheMarkSubmit(e.target); }
   if (e.target.id === 'tithe-entry-form') { e.preventDefault(); titheEntrySubmit(e.target); }
   if (e.target.id === 'enroll') { e.preventDefault(); doEnroll(e.target); }
   if (e.target.id === 'backup-form') { e.preventDefault(); doBackup(e.target); }

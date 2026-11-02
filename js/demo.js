@@ -1,7 +1,7 @@
 // The demo tour's made-up household. Everything here is fictional: the couple, employers, banks, stores and
 // numbers. Nothing is read from or derived from our real data; it is built in the browser from this file alone,
 // with dates relative to today, in the same shape as a real bank pull so every page runs the same code.
-import { addDays, weekStart } from './logic.js?v=25';
+import { addDays, weekStart } from './logic.js?v=26';
 
 // Wording the pages use where the real app names our own investing account.
 export const DEMO_WORDS = {
@@ -140,6 +140,7 @@ export function demoWrite(data, fn, body) {
   if (fn === 'ours_fix_clear') return true;
   if (fn === 'ours_setting_set') { if (!['weekly_target', 'tithing_pct', 'tithing_start', 'tithing_skip'].includes(body.p_name)) throw new Error('not in the tour'); return { name: body.p_name, value: body.p_value }; }
   if (fn === 'ours_tithe_save') return { id: `demo-tithe-${++nextItem}`, week: body.p_week, kind: body.p_kind, amount: body.p_amount, note: body.p_note, created_at: new Date().toISOString() };
+  if (fn === 'ours_tithe_mark') return { id: `demo-tithe-${++nextItem}`, week: body.p_week, kind: 'paid', amount: body.p_amount, note: body.p_note, paid_on: body.p_paid_on, created_at: new Date().toISOString() };
   if (fn === 'ours_tithe_delete') return true;
   if (fn === 'ours_request_refresh' || fn === 'ours_latest') return null;
   throw new Error('not in the tour');

@@ -2,8 +2,8 @@
 // and the box scripts that feed the emails (sync/month-summary.mjs, sync/year-summary.mjs). Same rules as everywhere
 // else: transfers and card payments are not spending, investing is not spending, tithing comes from tithe.js.
 // The returned objects hold no balances, account numbers or net worth, so they are safe to put in an email.
-import { CATS, summarize, weekStart, addDays, counts, weekLabel, shortDate } from './logic.js?v=25';
-import { computeTithing, titheSettings } from './tithe.js?v=25';
+import { CATS, summarize, weekStart, addDays, counts, weekLabel, shortDate } from './logic.js?v=26';
+import { computeTithing, titheSettings } from './tithe.js?v=26';
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const sum = (a, f = (x) => x) => a.reduce((t, x) => t + f(x), 0);
@@ -59,7 +59,8 @@ function titheFor(ctx, from, to) {
   const inc = sum(counted, (r) => r.amount);
   const adj = sum(tithing.filter((e) => e.kind === 'adjust' && e.week >= from && e.week <= to), (e) => Number(e.amount));
   const giving = sum(s.items.filter((r) => r.cat === 'giving'), (r) => r.spend);
-  const marked = sum(tithing.filter((e) => e.kind === 'paid' && e.week >= from && e.week <= to), (e) => Number(e.amount));
+  // Marks already matched to a bank/card payment are counted once, as that payment.
+  const marked = sum(T.weeks.filter((w) => w.ws >= from && w.ws <= to), (w) => w.manualExtra);
   const owed = T.withThisWeek > 0.004 ? T.withThisWeek : 0;
   return { pct: cfg.pct, income_counted: r2(inc), due: r2(Math.max(0, inc * cfg.pct / 100 + adj)), paid_giving: r2(giving), paid_marked: r2(marked),
     paid: r2(giving + marked), owed_at_end: r2(owed), ahead_at_end: r2(owed ? 0 : T.pool), counted_from: T.first, from };
